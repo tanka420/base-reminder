@@ -105,6 +105,7 @@ async function main(): Promise<void> {
     health_url: `http://${config.healthHost}:${config.healthPort}/health`,
     cron_scheduler_enabled: config.enableCronScheduler,
     telegram_bot_enabled: config.enableTelegramBot,
+    business_timezone: config.reminderTimezone,
   });
 
   // --- 7. Graceful shutdown ---

@@ -150,71 +150,139 @@ chmod +x /opt/base-reminder/scripts/backup-db.sh
 ### Manual Backup Command
 
 ```bash
-docker compose exec -T db pg_dump -U base_reminder -d base_reminder | gzip > backup_manual_$(date +%F).sql.gz
+docker compose exec -T db pg_dump -U base_reminder -d base_reminder | gzip > /opt/base-reminder/backups/backup_manual_$(date +%F).sql.gz
 ```
 
-### Database Restore Procedure
+### Non-Production Backup / Restore Validation Drill
 
-To restore a backup into a clean or existing database:
+To prove backup integrity without touching the live database:
 
 ```bash
-# 1. Stop app container to prevent write contention
-docker compose stop app
+# 1. Create a test compressed dump
+docker compose exec -T db pg_dump -U base_reminder -d base_reminder | gzip > /tmp/restore_drill.sql.gz
 
-# 2. Restore database from gzipped dump
-gunzip -c backup_manual_YYYY-MM-DD.sql.gz | docker compose exec -T db psql -U base_reminder -d base_reminder
+# 2. Create an isolated temporary drill database
+docker compose exec -T db psql -U base_reminder -d postgres -c "CREATE DATABASE restore_drill_temp;"
 
-# 3. Start app container
-docker compose start app
+# 3. Restore dump into the temporary database
+gunzip -c /tmp/restore_drill.sql.gz | docker compose exec -T db psql -U base_reminder -d restore_drill_temp
 
-# 4. Verify health
-docker compose exec app wget -qO- http://127.0.0.1:3000/health
+# 4. Verify table row counts in the restored database
+docker compose exec -T db psql -U base_reminder -d restore_drill_temp -c "
+  SELECT table_name, (xpath('/row/cnt/text()', xml_count))[1]::text::int as row_count
+  FROM (
+    SELECT table_name, query_to_xml(format('select count(*) as cnt from %I', table_name), false, true, '') as xml_count
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+  ) t ORDER BY table_name;"
+
+# 5. Clean up temporary database and drill file
+docker compose exec -T db psql -U base_reminder -d postgres -c "DROP DATABASE restore_drill_temp;"
+rm -f /tmp/restore_drill.sql.gz
 ```
 
-### Off-Server Storage (Next Resilience Layer)
+### Off-Server Storage (Private S3 Bucket)
 
-For disaster recovery against EC2 instance loss, copy daily backups to a private S3 bucket with lifecycle rules:
+For disaster recovery against EC2 instance loss, copy daily backups to a private S3 bucket using EC2 IAM Role authentication:
 
 ```bash
-# Example AWS CLI sync:
-# aws s3 cp "${BACKUP_FILE}" "s3://company-private-backups/base-reminder/"
+# Sync local backups to S3 (requires IAM Role attached to EC2 instance):
+aws s3 sync /opt/base-reminder/backups/ s3://company-private-backups/base-reminder/ --delete
 ```
 
 ---
 
-## 5. Storage & Disk Usage Monitoring
+## 5. Storage & Disk Capacity Management
 
-### Check Disk Space
+### Operational Disk Usage Thresholds
+
+On the target 20 GB gp3 EC2 root disk:
+
+| Usage Level | Threshold | Operational Classification | Action Required |
+|:---|:---|:---|:---|
+| **Normal** | `< 70%` | Healthy | Routine monitoring via daily checks |
+| **Warning** | `70% - 79%` | Warning | Inspect build cache, prune dangling Docker images, check backup count |
+| **Action Required** | `80% - 89%` | Elevated Risk | Execute safe Docker builder/image cleanup, verify old backup pruning |
+| **Critical** | `>= 90%` | Critical Alert | Immediate cleanup: vacuum system logs, remove unused images, trigger alert |
+
+### Check Disk Space & Docker Volumes
 
 ```bash
-# Check host filesystem
+# Check host filesystem utilization
 df -h /
 
-# Check Docker volume sizes
+# Check Docker disk consumption breakdown
 docker system df -v
 ```
 
-### Clean Docker Build Cache & Dangling Images
+### Safe Cleanup Commands
 
 ```bash
-docker image prune -f
+# 1. Prune unused build cache
 docker builder prune -f
+
+# 2. Prune dangling/untagged Docker images
+docker image prune -f
+
+# 3. Prune old local backups (keep last 14 days)
+find /opt/base-reminder/backups -name "base_reminder_*.sql.gz" -mtime +14 -delete
+
+# 4. Truncate systemd journal logs older than 3 days
+sudo journalctl --vacuum-time=3d
+```
+
+> [!CAUTION]
+> **DANGEROUS COMMANDS — DO NOT RUN IN PRODUCTION:**
+> - `docker compose down -v` → **DELETES THE DATABASE VOLUME (`pgdata`) AND DESTROYS ALL DATA!**
+> - `docker system prune -a --volumes` → **DELETES ALL UNATTACHED VOLUMES AND IMAGES!**
+> Always use `docker compose down` (WITHOUT `-v`) to stop containers safely.
+
+---
+
+## 6. Host Security, Clock & File Permissions
+
+### Host Clock & NTP Verification
+
+Accurate time synchronization is required for 08:15 ICT cron triggers and OTP token expiry calculations:
+
+```bash
+# Verify system clock and NTP synchronization
+timedatectl status
+```
+
+Expected output:
+- `NTP service: active`
+- `System clock synchronized: yes`
+- `Time zone: Asia/Ho_Chi_Minh` (or UTC with correct UTC time)
+
+### File Permissions Audit
+
+Production credentials and backups must have strict file permissions:
+
+```bash
+# Lock down .env (readable only by owner)
+chmod 600 /opt/base-reminder/.env
+
+# Lock down backup directory and files
+chmod 700 /opt/base-reminder/backups
+chmod 600 /opt/base-reminder/backups/* 2>/dev/null || true
 ```
 
 ---
 
-## 6. Troubleshooting & Diagnostics
+## 7. Troubleshooting & Diagnostics
 
 ### Issue 1: Telegram 409 Conflict Error (`terminated by other getUpdates request`)
 
 - **Symptom**: Logs show `TelegramError: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running`.
 - **Root Cause**: Two processes/containers are polling Telegram with the same `TELEGRAM_BOT_TOKEN`.
+- **Invariant**: Exactly **ONE** process may poll Telegram with the production token.
 - **Diagnosis**:
-  1. Check if multiple containers are running: `docker ps | grep base-reminder`.
-  2. Check if a local development server or second EC2 instance is running with the same token.
+  1. Check if multiple containers are running on EC2: `docker ps | grep base-reminder`.
+  2. Check if a developer's local machine is running `npm run start` or tests using the production bot token.
   3. Verify no `docker compose up --scale app=2` was executed.
 - **Resolution**:
-  - Terminate the extraneous process immediately.
+  - Terminate the extraneous local or secondary instance immediately.
   - Restart the production container: `docker compose restart app`.
 
 ### Issue 2: Delivery Error Investigation
@@ -248,7 +316,7 @@ docker builder prune -f
 ### Issue 3: Ambiguous Delivery / Stale `sending` Status
 
 - **Symptom**: Delivery row has status `sending` or chunks have status `ambiguous` after an unexpected crash or network timeout.
-- **Policy**: The delivery service never blindly re-sends ambiguous deliveries to prevent double notifications.
+- **Policy**: The delivery service automatically runs crash recovery on startup and marks stale `sending` chunks (> 5 min) as `ambiguous`. It never blindly re-sends ambiguous deliveries to prevent double notifications.
 - **Diagnosis & Fix**:
   ```bash
   # Check stuck sending deliveries

@@ -27,18 +27,31 @@ This guide covers deploying **Base Reminder** to an AWS EC2 virtual machine usin
 
 ---
 
-## 2. Server Prerequisites
+## 2. Server Prerequisites & AWS Security Hardening
 
-### AWS EC2 Instance Spec
+### AWS EC2 Instance Specifications
 
 - **AMI**: Ubuntu 24.04 LTS (x86_64 or ARM64)
-- **Instance Type**: `t4g.small` (ARM64) or `t3.small` (x86_64) (2 GB RAM, 2 vCPU)
-- **Storage**: 20–30 GB gp3 EBS root volume
-- **Security Group (Inbound Rules)**:
-  - `SSH` (TCP port 22): restricted to company IP / admin VPN
-  - **No web or database ports (3000, 5432) should be open to the internet**
+- **Instance Type**: `t4g.small` (ARM64) or `t3.small` (x86_64) (2 GB RAM, 2 vCPU, 2 GB swap)
+- **Storage**: 20–30 GB gp3 EBS root volume with **EBS default encryption enabled** (AWS KMS)
+- **Metadata Service**: **IMDSv2 required** (`HttpTokens=required`, `HttpPutResponseHopLimit=1`)
+- **IAM Role**: Attach EC2 Instance Profile with minimal S3 permissions (`s3:PutObject`) for off-server backups (no static AWS Access Keys in `.env`).
 
-### Install Docker & Compose on Ubuntu
+### AWS Security Group Rules
+
+- **Inbound Rules**:
+  - `SSH` (TCP 22): Restricted to company static IP / admin VPN only (`<ADMIN_IP>/32`).
+  - **Do NOT open ports 80, 443, 3000, 5432 inbound** (no public inbound traffic required; bot uses long-polling, health check is internal localhost).
+- **Outbound Rules**:
+  - `HTTPS` (TCP 443): Allow to internet (for Base API `*.base.vn` and Telegram API `api.telegram.org`).
+  - `SMTP/Submission` (TCP 587 / 465): Allow to corporate mail server (for OTP emails).
+  - `DNS` (UDP/TCP 53): Allow for name resolution.
+
+### OS Hardening & Security
+
+- **SSH Configuration**: Disable root login (`PermitRootLogin no`) and disable password authentication (`PasswordAuthentication no`). Key-based authentication only.
+- **Clock Synchronization**: Verified via `timedatectl status` (Amazon Time Sync Service active).
+- **Automatic Security Updates**: Enable `unattended-upgrades`.
 
 ```bash
 # Update packages
