@@ -1,0 +1,51 @@
+{
+  "code": 1,
+  "message": "",
+  "document": {
+    "id": 209927,
+    "name": "[NAME_SANITIZED] Bien ban nghiem thu va thanh ly",
+    "client_key": "service",
+    "status": "1",
+    "sequential": true,
+    "num_assigned": 2,
+    "num_signed": 2,
+    "signed_followers_id": [
+      1001,
+      1002
+    ],
+    "sequences": [
+      {
+        "id": 501,
+        "user_id": 1001,
+        "username": "[USERNAME_1]",
+        "order": 1,
+        "status": 1,
+        "signed_at": "1774500000"
+      },
+      {
+        "id": 502,
+        "user_id": 1002,
+        "username": "[USERNAME_2]",
+        "order": 2,
+        "status": 1,
+        "signed_at": "1774503600"
+      }
+    ],
+    "viewer_sign_status": "1",
+    "is_confirmer": false,
+    "confirm_status": 0,
+    "origin_object": {
+      "type": "service",
+      "link": "base-service://services/tickets/8899?stage_id=1234"
+    },
+    "data": {
+      "origin": {
+        "app": "service",
+        "ticket_id": "8899",
+        "stage_id": "1234"
+      },
+      "priority": "0",
+      "all_users_confirmed": 1
+    }
+  }
+}

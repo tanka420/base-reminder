@@ -10,6 +10,7 @@ dist/
 # Sanitized responses (generated at probe runtime — exclude from repo)
 docs/sample-responses/*.json
 !docs/sample-responses/.gitkeep
+!docs/sample-responses/sign-completed-sample.sanitized.json
 
 # IDE
 .vscode/
