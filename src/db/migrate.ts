@@ -11,8 +11,8 @@
  *  - Ordered by filename (lexicographic)
  *
  * Usage:
- *   npm run migrate              — apply pending migrations
- *   tsx src/db/migrate.ts        — same
+ *   npm run migrate              — apply pending migrations (compiled JS)
+ *   npm run migrate:dev          — apply pending migrations (TypeScript / tsx)
  */
 
 import { readdir, readFile } from "fs/promises";

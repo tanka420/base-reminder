@@ -193,15 +193,19 @@ npm run migrate
 
 | Command | Purpose |
 |---|---|
-| `npm run sync:users` | Synchronize workspace users from Base Account into local DB |
-| `npm run digest:preview -- --username <user>` | Generate and print plain-text digest for a user |
-| `npm run reminder:dry-run` | Run digest generation for all users without sending |
-| `npm run reminder:send-preview -- --username <user>` | Send formatted reminder preview to linked Telegram user |
-| `npm run reminder:send-test -- --username <user>` | Send live test reminder (records in DB) |
-| `npm run pipeline:run` | Execute complete manual reminder run for all linked users |
+| `npm run sync:users` | Synchronize workspace users from Base Account into local DB (compiled) |
+| `npm run digest:preview -- --username <user>` | Generate and print plain-text digest for a user (compiled) |
+| `npm run reminder:dry-run` | Run digest generation for all users without sending (compiled) |
+| `npm run reminder:send-preview -- --username <user>` | Send formatted reminder preview to linked Telegram user (compiled) |
+| `npm run reminder:send-test -- --username <user>` | Send live test reminder, records in DB (compiled) |
+| `npm run pipeline:run` | Execute complete manual reminder run for all linked users (compiled) |
 | `npm test` | Run full automated test suite |
 | `npm run build` | Compile TypeScript into `dist/` |
 | `npm start` | Start production service from compiled `dist/` |
+
+> [!NOTE]
+> Operational commands execute compiled JavaScript from `dist/src/` for production container compatibility (where `devDependencies` like `tsx` are excluded).
+> For local TypeScript development without pre-building, use the `:dev` equivalents (e.g. `npm run sync:users:dev`, `npm run reminder:dry-run:dev`, `npm run probe`).
 
 ---
 
