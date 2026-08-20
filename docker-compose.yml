@@ -1,0 +1,68 @@
+# docker-compose.yml — Base Reminder M1A
+#
+# Security defaults (per architecture-review.md v1.1 §14.3):
+#  - PostgreSQL port 5432 is NOT published externally
+#  - Health endpoint binds to 127.0.0.1 inside container (HEALTH_HOST=127.0.0.1)
+#    and is NOT mapped to a host port
+#  - restart: unless-stopped for both services
+#  - PostgreSQL data persists on named volume (not bind mount)
+#
+# Local development overrides:
+#  To access DB from host tools (DBeaver, psql CLI), add this to db service:
+#    ports:
+#      - "127.0.0.1:5432:5432"
+#  Do NOT commit the ports line — keep it commented out.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    # Health endpoint is localhost-bound inside the container (HEALTH_HOST=127.0.0.1).
+    # It is NOT mapped to a host port by default.
+    # To enable external monitoring, set HEALTH_HOST=0.0.0.0 and add:
+    #   ports:
+    #     - "127.0.0.1:3000:3000"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - internal
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: base_reminder
+      POSTGRES_USER: base_reminder
+      # Use DB_PASSWORD from .env. DATABASE_URL in .env must match.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Port 5432 is intentionally NOT published externally.
+    # DB is accessible only via the 'internal' Docker network.
+    # Uncomment ONLY for local development, NEVER in production:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U base_reminder -d base_reminder"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+
+networks:
+  internal:
+    # Bridge network, isolated from external traffic
+    driver: bridge
+
+volumes:
+  pgdata:
+    # Named volume — data persists across container restarts
+    driver: local

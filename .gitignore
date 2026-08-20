@@ -1,0 +1,30 @@
+# Environment — NEVER commit real tokens
+.env
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Sanitized responses (generated at probe runtime — exclude from repo)
+docs/sample-responses/*.json
+!docs/sample-responses/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Local Compose Overrides
+docker-compose.override.yml
+docker-compose.local.yml
+

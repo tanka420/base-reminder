@@ -1,0 +1,41 @@
+{
+  "name": "base-reminder",
+  "version": "0.1.0",
+  "description": "Telegram Reminder integrated with Base.vn — M1A: Core Foundation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "probe": "tsx scripts/probe-base-api.ts",
+    "probe:request": "tsx scripts/probe-request-deep.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "start": "node dist/src/index.js",
+    "migrate": "tsx src/db/migrate.ts",
+    "sync:users": "tsx src/sync/sync-cli.ts",
+    "digest:preview": "tsx src/cli/digest-preview.ts",
+    "reminder:dry-run": "tsx src/cli/reminder-dry-run.ts",
+    "pipeline:run": "tsx src/cli/pipeline-run.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "node-cron": "^4.6.0",
+    "p-limit": "^6.2.0",
+    "pg": "^8.13.1",
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.11.10",
+    "pg-mem": "^3.0.14",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
