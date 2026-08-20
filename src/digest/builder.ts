@@ -30,6 +30,7 @@ export interface BuildUserDigestParams {
   wework: ModuleResult<ActionableTask>;
   workflow: ModuleResult<ActionableJob>;
   request: ModuleResult<ActionableRequest>;
+  runDate?: string;
 }
 
 /**
@@ -68,6 +69,7 @@ export function buildUserDigest(params: BuildUserDigestParams): UserDigest {
     displayName,
     status,
     isPartial,
+    runDate: params.runDate,
     wework,
     workflow,
     request,

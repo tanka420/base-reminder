@@ -1,17 +1,18 @@
 /**
  * src/scheduler/cron.ts
  *
- * Cron scheduler framework with missed-run detection and idempotency.
+ * Production Cron Scheduler with Missed-Run Cutoff & Dual-Axis Idempotency.
  *
- * Note (M1B contract):
- *  - Automatic 08:15 execution is DISABLED by default (enableCronScheduler: false).
- *  - M2 will enable scheduled employee delivery.
+ * Default configuration:
+ *  - 08:15 Asia/Ho_Chi_Minh (Mon-Fri)
+ *  - Missed-run cutoff: 10:00 Asia/Ho_Chi_Minh
+ *  - Disabled by default (ENABLE_CRON_SCHEDULER=false)
  */
 
 import cron, { type ScheduledTask } from "node-cron";
 import type { Config } from "../config/index.js";
 import { executeReminderPipeline } from "./reminder-job.js";
-import { getReminderRunByKey } from "../db/queries/runs.js";
+import { getReminderRunByKey, formatScheduledRunKey } from "../db/queries/runs.js";
 import { formatTzDate } from "../collectors/wework.js";
 import { logger } from "../logging/logger.js";
 
@@ -30,7 +31,7 @@ export function isWeekdayInTimezone(now: Date, timezone: string): boolean {
 }
 
 /**
- * Check if the current time has passed 08:15 in the specified timezone.
+ * Check if the current time has passed the scheduled morning time (default 08:15).
  */
 export function isAfterMorningTime(now: Date, timezone: string, hour = 8, minute = 15): boolean {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -49,8 +50,32 @@ export function isAfterMorningTime(now: Date, timezone: string, hour = 8, minute
 }
 
 /**
+ * Check if the current time has passed the cutoff hour (default 10:00).
+ */
+export function isPastCutoffTime(now: Date, timezone: string, cutoffHour = 10, cutoffMinute = 0): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+
+  const currentHour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const currentMinute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+
+  if (currentHour > cutoffHour) return true;
+  if (currentHour === cutoffHour && currentMinute >= cutoffMinute) return true;
+  return false;
+}
+
+/**
  * Inspect whether a scheduled run was missed for today (e.g. server was offline at 08:15).
- * Only triggers pipeline execution if enableCronScheduler is true.
+ * Only executes if:
+ *  - Weekday
+ *  - Past 08:15
+ *  - BEFORE cutoff hour (default 10:00)
+ *  - No existing scheduled run in database
+ *  - ENABLE_CRON_SCHEDULER is true
  */
 export async function checkMissedRun(
   config: Config,
@@ -59,27 +84,48 @@ export async function checkMissedRun(
   const timezone = config.reminderTimezone;
   const isWeekday = isWeekdayInTimezone(now, timezone);
   const isPastScheduledTime = isAfterMorningTime(now, timezone, 8, 15);
-  const todayKey = formatTzDate(now, timezone);
+  const todayDate = formatTzDate(now, timezone);
+  const scheduledKey = formatScheduledRunKey(todayDate);
 
   if (!isWeekday || !isPastScheduledTime) {
     return false;
   }
 
-  const existingRun = await getReminderRunByKey(todayKey);
+  // Check if scheduled run exists (or legacy unnamespaced key)
+  const existingRun =
+    (await getReminderRunByKey(scheduledKey)) ||
+    (await getReminderRunByKey(todayDate));
+
   if (existingRun !== null) {
     return false;
   }
 
+  const isCutoff = isPastCutoffTime(now, timezone, config.missedRunCutoffHour, 0);
+
+  if (isCutoff) {
+    logger.warn({
+      msg: "missed reminder run detected for today but time has passed cutoff, skipping automatic delivery",
+      date: todayDate,
+      cutoff_hour: config.missedRunCutoffHour,
+      scheduled_key: scheduledKey,
+    });
+    return false;
+  }
+
   logger.warn({
-    msg: "missed reminder run detected for today",
-    date: todayKey,
+    msg: "missed reminder run detected within recovery window (08:15 - 10:00)",
+    date: todayDate,
+    scheduled_key: scheduledKey,
     scheduler_enabled: config.enableCronScheduler,
   });
 
   if (config.enableCronScheduler) {
-    logger.info({ msg: "executing missed reminder run now" });
+    logger.info({ msg: "executing missed scheduled reminder run now" });
     try {
-      await executeReminderPipeline({ now });
+      await executeReminderPipeline({
+        now,
+        runType: "scheduled",
+      });
       return true;
     } catch (err) {
       logger.error({
@@ -95,12 +141,12 @@ export async function checkMissedRun(
 
 /**
  * Initialize the cron scheduler.
- * Returns null when disabled by configuration (M1B default).
+ * Returns null when disabled by configuration (default).
  */
 export function initScheduler(config: Config): ScheduledTask | null {
   if (!config.enableCronScheduler) {
     logger.info({
-      msg: "cron scheduler is disabled (M1B default; manual/CLI triggers only)",
+      msg: "cron scheduler is disabled (default; manual/CLI triggers only)",
       cron_expr: config.reminderCron,
       timezone: config.reminderTimezone,
     });
@@ -115,9 +161,11 @@ export function initScheduler(config: Config): ScheduledTask | null {
   activeCronTask = cron.schedule(
     config.reminderCron,
     async () => {
-      logger.info({ msg: "cron schedule triggered", cron: config.reminderCron });
+      logger.info({ msg: "scheduled morning cron triggered", cron: config.reminderCron });
       try {
-        await executeReminderPipeline();
+        await executeReminderPipeline({
+          runType: "scheduled",
+        });
       } catch (err) {
         logger.error({
           msg: "scheduled reminder pipeline error",
@@ -131,9 +179,10 @@ export function initScheduler(config: Config): ScheduledTask | null {
   );
 
   logger.info({
-    msg: "cron scheduler initialized",
+    msg: "production cron scheduler initialized",
     cron_expr: config.reminderCron,
     timezone: config.reminderTimezone,
+    cutoff_hour: config.missedRunCutoffHour,
   });
 
   return activeCronTask;

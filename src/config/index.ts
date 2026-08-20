@@ -42,6 +42,8 @@ export interface CoreConfig {
   readonly reminderCron: string;
   /** Whether the automatic cron scheduler runs in background (default: false in M1B/M2A) */
   readonly enableCronScheduler: boolean;
+  /** Hour (0-23) after which missed morning runs are no longer automatically executed (default: 10) */
+  readonly missedRunCutoffHour: number;
 
   // --- Health endpoint ---
   /** Bind address for internal health endpoint (default: 127.0.0.1) */
@@ -137,6 +139,7 @@ export function loadCoreConfig(): CoreConfig {
   const reminderTimezone = optionalEnv("REMINDER_TIMEZONE", "Asia/Ho_Chi_Minh");
   const reminderCron = optionalEnv("REMINDER_CRON", "15 8 * * 1-5");
   const enableCronScheduler = optionalEnv("ENABLE_CRON_SCHEDULER", "false").toLowerCase() === "true";
+  const missedRunCutoffHour = optionalIntEnv("MISSED_RUN_CUTOFF_HOUR", 10, missing);
   const healthHost = optionalEnv("HEALTH_HOST", "127.0.0.1");
   const healthPort = optionalIntEnv("HEALTH_PORT", 3000, missing);
   const baseApiTimeoutMs = optionalIntEnv("BASE_API_TIMEOUT_MS", 15_000, missing);
@@ -168,6 +171,7 @@ export function loadCoreConfig(): CoreConfig {
     reminderTimezone,
     reminderCron,
     enableCronScheduler,
+    missedRunCutoffHour,
     healthHost,
     healthPort,
     baseApiTimeoutMs,

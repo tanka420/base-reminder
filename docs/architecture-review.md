@@ -700,25 +700,33 @@ User → /start → enters username
 
 ### 9.1 Unlinking
 
+> [!IMPORTANT]
+> **M2A Implementation Hardening**: M2A intentionally hardened `/unlink` by requiring OTP verification sent to the user's linked Base corporate email before unlinking. This prevents unauthorized unlinking and ensures auditability. Treat this as the source of truth.
+
 ```
 User sends /unlink (private chat)
         │
         ▼
-Bot: "Bạn có chắc muốn hủy liên kết tài khoản {display_name} ({username})?
-      Gõ 'xac nhan' để xác nhận."
+Bot: Checks active link
+     ├─ If not linked → "Bạn chưa liên kết tài khoản nào."
+     └─ If linked → Generate 6-digit OTP, send to user's Base email
         │
         ▼
-User types: "xac nhan"
+Bot: "⚠️ Xác nhận hủy liên kết: Nhập mã 6 chữ số OTP đã gửi tới email {masked_email}:"
+        │
+        ▼
+User enters OTP
         │
         ▼
 Backend:
-├─ Set users_telegram.unlinked_at = NOW()
-├─ Set telegram_conversations.state = 'IDLE'
-├─ Audit log: UNLINK event
-└─ Bot: "✅ Đã hủy liên kết. Gõ /start để liên kết lại."
+├─ Verify OTP (bcrypt, attempt tracking)
+├─ If correct:
+│   ├─ Set telegram_links.unlinked_at = NOW()
+│   ├─ Set telegram_conversations.state = 'IDLE'
+│   ├─ Audit log: UNLINK event
+│   └─ Bot: "✅ Đã hủy liên kết. Gõ /start để liên kết lại."
+└─ If incorrect/expired → notify user remaining attempts / lockout
 ```
-
-**No OTP required for unlinking** — the user is unlinking *their own* Telegram account. They already possess the Telegram session.
 
 ### 9.2 Relinking
 

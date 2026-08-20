@@ -36,6 +36,13 @@ export function initPool(databaseUrl: string): void {
 }
 
 /**
+ * Override pool for unit / integration tests (pg-mem).
+ */
+export function setPoolForTesting(testPool: Pool | any): void {
+  pool = testPool;
+}
+
+/**
  * Get the active pool. Throws if initPool has not been called.
  */
 export function getPool(): Pool {

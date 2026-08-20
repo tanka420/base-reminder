@@ -14,7 +14,7 @@ export type ModuleStatus = "ok" | "error" | "pending";
 export type DigestStatus = "empty" | "ready" | "partial" | "error";
 
 export interface ActionableTask {
-  id: number;
+  id: number; // Canonical Base task ID
   name: string;
   deadline?: number; // Unix seconds
   isOverdue: boolean;
@@ -24,21 +24,25 @@ export interface ActionableTask {
 }
 
 export interface ActionableJob {
-  id: number;
+  id: number; // Canonical Base job ID
   name: string;
   stageName?: string;
   workflowName?: string;
   stageDeadline?: number; // Unix seconds
+  isOverdue?: boolean;
+  isDueToday?: boolean;
   url: string;
 }
 
 export interface ActionableRequest {
-  id: number;
+  id: number; // Canonical Base request ID
   name: string;
   creatorUsername: string;
   workflow: "sequential" | "parallel";
   url: string;
   deadline?: number; // Unix seconds
+  isOverdue?: boolean;
+  isDueToday?: boolean;
 }
 
 export interface ModuleResult<T> {
@@ -53,6 +57,7 @@ export interface UserDigest {
   displayName: string;
   status: DigestStatus;
   isPartial: boolean;
+  runDate?: string; // YYYY-MM-DD in Asia/Ho_Chi_Minh
   wework: ModuleResult<ActionableTask>;
   workflow: ModuleResult<ActionableJob>;
   request: ModuleResult<ActionableRequest>;

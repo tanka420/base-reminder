@@ -5,7 +5,15 @@
  *
  * Filtering rules:
  *  - status === "0" (incomplete only)
+ *  - AND review !== "1" and review !== 1 (exclude tasks currently under review)
  *  - AND (overdue === 1 OR deadline === today in timezone)
+ *
+ * Review State Verification:
+ *  - Real Base API field: `task.review`
+ *  - Observed values: "0" = normal active/incomplete or done, "1" / 1 = currently submitted for review.
+ *  - Rationale: When an assignee submits a task for review to their manager/assigner,
+ *    the assignee does not currently need to take action. Reminding them creates noise.
+ *    Review-state exclusion is additive and preserves normal active tasks.
  *
  * Timezone & Deadline semantics (Asia/Ho_Chi_Minh UTC+7):
  *  - deadline_has_time = 0 (date-only): If date is today, isDueToday = true and isOverdue = false.
@@ -15,6 +23,7 @@
  */
 
 import { WeworkApiClient, type BaseWeworkTask } from "../base-api/wework.js";
+import { buildWeworkDeepLink } from "../base-api/deep-links.js";
 import type { ActionableTask } from "../digest/types.js";
 
 /** Helper: Format a Date or Unix timestamp to YYYY-MM-DD in the specified timezone */
@@ -29,15 +38,21 @@ export function formatTzDate(dateOrSeconds: Date | number, timezone: string): st
 }
 
 /**
- * Classify a task for reminder inclusion based on status and deadline.
+ * Classify a task for reminder inclusion based on status, review state, and deadline.
  */
 export function classifyWeworkTask(
   task: BaseWeworkTask,
   timezone: string,
   now: Date = new Date()
 ): { actionable: boolean; isDueToday: boolean; isOverdue: boolean; deadlineSeconds?: number } {
-  // Only incomplete tasks (status === "0") can be actionable
+  // 1. Only incomplete tasks (status === "0") can be actionable
   if (task.status !== "0") {
+    return { actionable: false, isDueToday: false, isOverdue: false };
+  }
+
+  // 2. Exclude tasks currently under review (review === "1" or review === 1)
+  const isUnderReview = task.review === "1" || task.review === 1;
+  if (isUnderReview) {
     return { actionable: false, isDueToday: false, isOverdue: false };
   }
 
@@ -79,6 +94,7 @@ export function classifyWeworkTask(
 
 /**
  * Collect actionable tasks for a specific user.
+ * Sorted: Overdue (oldest first) -> Due Today.
  */
 export async function collectWeworkTasks(
   client: WeworkApiClient,
@@ -93,9 +109,8 @@ export async function collectWeworkTasks(
     const classification = classifyWeworkTask(task, timezone, now);
     if (!classification.actionable) continue;
 
-    const url = task.hid
-      ? `https://wework.base.vn/task/${task.hid}`
-      : "https://wework.base.vn";
+    // Use canonical task.id with centralized builder (NEVER task.link or task.hid)
+    const url = buildWeworkDeepLink(task.id);
 
     actionableItems.push({
       id: task.id,
@@ -107,6 +122,15 @@ export async function collectWeworkTasks(
       projectId: task.project_id,
     });
   }
+
+  // Sort items: overdue first (oldest deadline first), then due today
+  actionableItems.sort((a, b) => {
+    if (a.isOverdue && !b.isOverdue) return -1;
+    if (!a.isOverdue && b.isOverdue) return 1;
+    const aDead = a.deadline ?? 0;
+    const bDead = b.deadline ?? 0;
+    return aDead - bDead;
+  });
 
   return actionableItems;
 }

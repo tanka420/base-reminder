@@ -23,6 +23,35 @@ export interface ReminderRunRecord {
 }
 
 /**
+ * Format standard scheduled run key (e.g. "scheduled:2026-08-21")
+ */
+export function formatScheduledRunKey(dateStr: string): string {
+  return `scheduled:${dateStr}`;
+}
+
+/**
+ * Format manual test/ad-hoc run key (unique per execution, does NOT block scheduled runs)
+ */
+export function formatManualRunKey(): string {
+  return `manual:${Date.now()}:${Math.random().toString(36).substring(2, 7)}`;
+}
+
+/**
+ * Format user-specific test run key
+ */
+export function formatTestRunKey(username: string): string {
+  const clean = username.toLowerCase().replace(/^@/, "").trim();
+  return `test:${clean}:${Date.now()}`;
+}
+
+/**
+ * Format dry-run key
+ */
+export function formatDryRunKey(): string {
+  return `dryrun:${Date.now()}`;
+}
+
+/**
  * Attempt to insert a new reminder run for today's run_key.
  * Returns the run ID on success, or null if a run already exists (idempotency).
  */
@@ -30,6 +59,13 @@ export async function createReminderRun(
   runKey: string,
   runDate: string
 ): Promise<number | null> {
+  // Pre-check for existing run key (application level)
+  const existing = await getReminderRunByKey(runKey);
+  if (existing !== null) {
+    return null;
+  }
+
+  // Insert with ON CONFLICT (database level constraint)
   const result = await query<{ id: number }>(
     `
     INSERT INTO reminder_runs (run_key, run_date, status, started_at)

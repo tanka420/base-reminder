@@ -13,6 +13,8 @@
     "sync:users": "tsx src/sync/sync-cli.ts",
     "digest:preview": "tsx src/cli/digest-preview.ts",
     "reminder:dry-run": "tsx src/cli/reminder-dry-run.ts",
+    "reminder:send-test": "tsx src/cli/send-test-reminder.ts",
+    "reminder:send-preview": "tsx src/cli/send-preview.ts",
     "pipeline:run": "tsx src/cli/pipeline-run.ts",
     "test": "vitest run",
     "test:watch": "vitest"

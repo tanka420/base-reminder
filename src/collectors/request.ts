@@ -9,9 +9,16 @@
  *  - sequential: only first owner in owners array with approved === 0 is actionable
  *  - parallel: all owners with approved === 0 are actionable
  *  - any other workflow value: return false (fail closed)
+ *
+ * Deadline Classification:
+ *  - local date < today in timezone -> isOverdue = true
+ *  - local date == today in timezone -> isDueToday = true
+ *  - missing deadline -> neither (neutral)
  */
 
 import { RequestApiClient, type BaseRequestItem } from "../base-api/request.js";
+import { buildRequestDeepLink } from "../base-api/deep-links.js";
+import { formatTzDate } from "./wework.js";
 import type { ActionableRequest } from "../digest/types.js";
 
 /** Helper: Clean username string (removes @ prefix and trims) */
@@ -56,11 +63,47 @@ export function isRequestActionableForUser(
 }
 
 /**
+ * Classify a request deadline against the current date in the specified timezone.
+ */
+export function classifyRequestItem(
+  request: BaseRequestItem,
+  timezone: string,
+  now: Date = new Date()
+): { isOverdue: boolean; isDueToday: boolean; deadline?: number } {
+  const rawDeadline = request.deadline !== undefined && request.deadline !== null && request.deadline !== ""
+    ? Number(request.deadline)
+    : 0;
+
+  const deadline = Number.isFinite(rawDeadline) && rawDeadline > 0 ? rawDeadline : undefined;
+
+  if (deadline === undefined) {
+    return { isOverdue: false, isDueToday: false, deadline: undefined };
+  }
+
+  const todayStr = formatTzDate(now, timezone);
+  const deadlineDateStr = formatTzDate(deadline, timezone);
+
+  let isDueToday = false;
+  let isOverdue = false;
+
+  if (deadlineDateStr < todayStr) {
+    isOverdue = true;
+  } else if (deadlineDateStr === todayStr) {
+    isDueToday = true;
+  }
+
+  return { isOverdue, isDueToday, deadline };
+}
+
+/**
  * Collect all actionable approval requests for a user.
+ * Sorted: Overdue (oldest first) -> Due Today -> Others.
  */
 export async function collectActionableRequests(
   client: RequestApiClient,
-  username: string
+  username: string,
+  timezone = "Asia/Ho_Chi_Minh",
+  now: Date = new Date()
 ): Promise<ActionableRequest[]> {
   const allRequests = await client.getAllPendingRequests(username);
   const actionableItems: ActionableRequest[] = [];
@@ -68,13 +111,10 @@ export async function collectActionableRequests(
   for (const req of allRequests) {
     if (!isRequestActionableForUser(req, username)) continue;
 
-    const rawDeadline = req.deadline ? Number(req.deadline) : 0;
-    const deadline =
-      Number.isFinite(rawDeadline) && rawDeadline > 0 ? rawDeadline : undefined;
+    const classification = classifyRequestItem(req, timezone, now);
 
-    const url = req.hid
-      ? `https://request.base.vn/request/${req.hid}`
-      : "https://request.base.vn";
+    // Use canonical request.id with centralized builder (NEVER workflow_id or owner_id)
+    const url = buildRequestDeepLink(req.id);
 
     actionableItems.push({
       id: req.id,
@@ -82,9 +122,22 @@ export async function collectActionableRequests(
       creatorUsername: req.username || "unknown",
       workflow: (req.workflow?.toLowerCase() === "parallel" ? "parallel" : "sequential"),
       url,
-      deadline,
+      deadline: classification.deadline,
+      isOverdue: classification.isOverdue,
+      isDueToday: classification.isDueToday,
     });
   }
+
+  // Sort items: overdue first (oldest deadline first), then due today, then neutral
+  actionableItems.sort((a, b) => {
+    if (a.isOverdue && !b.isOverdue) return -1;
+    if (!a.isOverdue && b.isOverdue) return 1;
+    if (a.isDueToday && !b.isDueToday) return -1;
+    if (!a.isDueToday && b.isDueToday) return 1;
+    const aDead = a.deadline ?? 0;
+    const bDead = b.deadline ?? 0;
+    return aDead - bDead;
+  });
 
   return actionableItems;
 }

@@ -9,14 +9,17 @@
  *  - Asia/Ho_Chi_Minh day boundary
  *  - Morning hour date-only task not marked overdue falsely
  *  - Status filtering (incomplete status="0" only)
+ *  - Review-state exclusion (review="1" or review=1 excluded)
+ *  - Realistic API payload -> collectWeworkTasks -> ActionItem pipeline
  */
 
 import { describe, it, expect } from "vitest";
 import {
   classifyWeworkTask,
+  collectWeworkTasks,
   formatTzDate,
 } from "../collectors/wework.js";
-import type { BaseWeworkTask } from "../base-api/wework.js";
+import type { BaseWeworkTask, WeworkApiClient } from "../base-api/wework.js";
 
 describe("Wework Collector & Task Classification", () => {
   const TZ = "Asia/Ho_Chi_Minh";
@@ -41,6 +44,7 @@ describe("Wework Collector & Task Classification", () => {
         id: 101,
         name: "Date-only task due today",
         status: "0",
+        review: "0",
         has_deadline: 1,
         deadline: todayUnix,
         deadline_has_time: 0,
@@ -62,6 +66,7 @@ describe("Wework Collector & Task Classification", () => {
         id: 102,
         name: "Date-only task from yesterday",
         status: "0",
+        review: "0",
         has_deadline: 1,
         deadline: yesterdayUnix,
         deadline_has_time: 0,
@@ -83,6 +88,7 @@ describe("Wework Collector & Task Classification", () => {
         id: 103,
         name: "Date-only task for tomorrow",
         status: "0",
+        review: "0",
         has_deadline: 1,
         deadline: tomorrowUnix,
         deadline_has_time: 0,
@@ -106,6 +112,7 @@ describe("Wework Collector & Task Classification", () => {
         id: 201,
         name: "Task due at 5 PM today",
         status: "0",
+        review: "0",
         has_deadline: 1,
         deadline: laterTodayUnix,
         deadline_has_time: 1,
@@ -127,6 +134,7 @@ describe("Wework Collector & Task Classification", () => {
         id: 202,
         name: "Task was due at 7 AM today",
         status: "0",
+        review: "0",
         has_deadline: 1,
         deadline: earlierTodayUnix,
         deadline_has_time: 1,
@@ -141,12 +149,43 @@ describe("Wework Collector & Task Classification", () => {
     });
   });
 
-  describe("Status filtering and API overdue flags", () => {
+  describe("Review state exclusion & status filtering", () => {
+    it("excludes task currently under review (review='1') even if incomplete", () => {
+      const task: BaseWeworkTask = {
+        id: 401,
+        name: "Task submitted for manager review",
+        status: "0",
+        review: "1",
+        has_deadline: 1,
+        deadline: 1787245199, // Today
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+      expect(result.actionable).toBe(false);
+    });
+
+    it("excludes task currently under review (numeric review=1) when overdue", () => {
+      const task: BaseWeworkTask = {
+        id: 402,
+        name: "Overdue task waiting for review",
+        status: "0",
+        review: 1,
+        has_deadline: 1,
+        deadline: 1787158799, // Yesterday
+        overdue: 1,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+      expect(result.actionable).toBe(false);
+    });
+
     it("ignores completed tasks (status='1')", () => {
       const task: BaseWeworkTask = {
         id: 301,
         name: "Completed task",
         status: "1",
+        review: "0",
         deadline: 1787245199,
         overdue: 1,
       };
@@ -155,11 +194,12 @@ describe("Wework Collector & Task Classification", () => {
       expect(result.actionable).toBe(false);
     });
 
-    it("includes incomplete task with no deadline but overdue=1", () => {
+    it("includes incomplete task with no deadline but overdue=1 when review='0'", () => {
       const task: BaseWeworkTask = {
         id: 302,
         name: "Overdue task without deadline timestamp",
         status: "0",
+        review: "0",
         deadline: 0,
         overdue: 1,
       };
@@ -168,6 +208,92 @@ describe("Wework Collector & Task Classification", () => {
       expect(result.actionable).toBe(true);
       expect(result.isOverdue).toBe(true);
       expect(result.isDueToday).toBe(false);
+    });
+  });
+
+  describe("Real-Data Shaped Regression Pipeline (API -> Collector -> ActionItem)", () => {
+    it("correctly filters tasks A, B, C, D, E from realistic API payload", async () => {
+      const mockPayload: BaseWeworkTask[] = [
+        // A. Active overdue task -> INCLUDED
+        {
+          id: 10505978,
+          name: "Minigame dự đoán Worldcup trên Facebook",
+          status: "0",
+          review: "0",
+          overdue: 1,
+          has_deadline: "1",
+          deadline: "1785517199", // Overdue in 2026
+          link: "base-wework://digital-210679?task=10505978",
+        },
+        // B. Active task due today -> INCLUDED
+        {
+          id: 10505979,
+          name: "Hoàn thiện nội dung website VP Racing",
+          status: "0",
+          review: "0",
+          overdue: 0,
+          has_deadline: "1",
+          deadline: "1787245199", // Today 2026-08-20
+          link: "base-wework://digital-210679?task=10505979",
+        },
+        // C. Completed task -> EXCLUDED
+        {
+          id: 10505738,
+          name: "Chuyển đổi các kênh YouTube",
+          status: "1",
+          review: "0",
+          overdue: 0,
+          has_deadline: "1",
+          deadline: "1781715599",
+        },
+        // D. Task currently under review -> EXCLUDED
+        {
+          id: 9784217,
+          name: "Tạo thư mục Google Drive tổng hợp tài liệu VP Racing",
+          status: "0",
+          review: "1",
+          overdue: 0,
+          has_deadline: "0",
+          deadline: "0",
+        },
+        // E. Review-state task that is overdue -> still EXCLUDED
+        {
+          id: 9784138,
+          name: "Master Plan 2026 - Digital",
+          status: "0",
+          review: "1",
+          overdue: 1,
+          has_deadline: "1",
+          deadline: "1775408399",
+        },
+      ];
+
+      const mockClient = {
+        getAllUserTasks: async () => mockPayload,
+      } as unknown as WeworkApiClient;
+
+      const actionableTasks = await collectWeworkTasks(mockClient, "Digital01", TZ, mockNow);
+
+      // Verify only A and B are returned
+      expect(actionableTasks.length).toBe(2);
+
+      // Task A (Overdue)
+      expect(actionableTasks[0]?.id).toBe(10505978);
+      expect(actionableTasks[0]?.name).toBe("Minigame dự đoán Worldcup trên Facebook");
+      expect(actionableTasks[0]?.isOverdue).toBe(true);
+      expect(actionableTasks[0]?.url).toBe("https://wework.base.vn/tasks?task=10505978");
+
+      // Task B (Due Today)
+      expect(actionableTasks[1]?.id).toBe(10505979);
+      expect(actionableTasks[1]?.name).toBe("Hoàn thiện nội dung website VP Racing");
+      expect(actionableTasks[1]?.isDueToday).toBe(true);
+      expect(actionableTasks[1]?.url).toBe("https://wework.base.vn/tasks?task=10505979");
+
+      // Excluded tasks verification
+      const ids = actionableTasks.map((t) => t.id);
+      expect(ids).not.toContain(10505738); // C: Completed
+      expect(ids).not.toContain(9784217);  // D: Review
+      expect(ids).not.toContain(9784138);  // E: Review + Overdue
     });
   });
 

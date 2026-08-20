@@ -1,24 +1,28 @@
 /**
  * src/scheduler/reminder-job.ts
  *
- * Pipeline Orchestrator — executes the complete reminder collection pipeline.
+ * Pipeline Orchestrator — executes the complete reminder collection & delivery pipeline.
  *
  * Flow:
  *  1. (Optional) User Sync (Account API → PostgreSQL base_users)
- *  2. Check/create idempotent run record in `reminder_runs`
+ *  2. Check/create idempotent run record in `reminder_runs` (namespaced run_key)
  *  3. Fetch active workspace members
  *  4. Bounded concurrent collection (Wework, Workflow, Request) per user
  *  5. Build structured UserDigests (channel-agnostic)
  *  6. (If not dry-run) Batch store delivery records in `reminder_deliveries`
- *  7. Finalize run and update passive health status
+ *  7. (If deliverTelegram !== false) Deliver formatted Telegram digests with per-chunk tracking
+ *  8. Finalize run and update passive health status
  *
- * Concurrency:
- *  - Controlled via p-limit(config.baseApiConcurrency) across users.
- *  - BaseApiClient is the single retry authority.
+ * Run Key Idempotency:
+ *  - Scheduled: `scheduled:YYYY-MM-DD` (enforces daily uniqueness)
+ *  - Manual: `manual:<timestamp>:<rand>`
+ *  - Test: `test:<username>:<timestamp>`
+ *  - Dryrun: `dryrun:<timestamp>`
  */
 
 import pLimit from "p-limit";
-import { loadConfig } from "../config/index.js";
+import { Api, Bot } from "grammy";
+import { loadConfig, loadTelegramConfig } from "../config/index.js";
 import { AccountApiClient } from "../base-api/account.js";
 import { WeworkApiClient } from "../base-api/wework.js";
 import { WorkflowApiClient } from "../base-api/workflow.js";
@@ -29,6 +33,10 @@ import {
   createReminderRun,
   updateReminderRun,
   getReminderRunByKey,
+  formatScheduledRunKey,
+  formatManualRunKey,
+  formatTestRunKey,
+  formatDryRunKey,
 } from "../db/queries/runs.js";
 import {
   batchInsertDeliveries,
@@ -45,6 +53,8 @@ import type {
   ActionableJob,
   ActionableRequest,
 } from "../digest/types.js";
+import { TelegramClient } from "../telegram/telegram-client.js";
+import { DeliveryService, type RunDeliverySummary } from "../delivery/delivery-service.js";
 import { logger } from "../logging/logger.js";
 import { recordModuleSuccess, recordLastReminderRun } from "../health/server.js";
 
@@ -52,7 +62,13 @@ import { recordModuleSuccess, recordLastReminderRun } from "../health/server.js"
 // Types
 // ---------------------------------------------------------------------------
 
+export type RunType = "scheduled" | "manual" | "test" | "dryrun";
+
 export interface PipelineOptions {
+  /** Explicit run type (defaults to 'scheduled' if not dry-run and no targetUsername) */
+  runType?: RunType;
+  /** Custom run key override */
+  customRunKey?: string;
   /** If true, ignore existing run_key conflict and create/overwrite */
   force?: boolean;
   /** Reference date (defaults to new Date()) */
@@ -63,6 +79,10 @@ export interface PipelineOptions {
   syncFirst?: boolean;
   /** If specified, only run for this single username */
   targetUsername?: string;
+  /** If false, skip Telegram delivery phase (collection & storage only) */
+  deliverTelegram?: boolean;
+  /** Custom TelegramClient instance for testing / mocking */
+  telegramClient?: TelegramClient;
 }
 
 export interface PipelineResult {
@@ -74,6 +94,9 @@ export interface PipelineResult {
   usersReady: number;
   usersPartial: number;
   usersError: number;
+  usersDelivered?: number;
+  usersSkipped?: number;
+  deliverySummary?: RunDeliverySummary;
   digests: UserDigest[];
   durationMs: number;
   skipped?: boolean;
@@ -85,7 +108,7 @@ export interface PipelineResult {
 // ---------------------------------------------------------------------------
 
 /**
- * Execute the complete reminder data collection pipeline.
+ * Execute the complete reminder collection and delivery pipeline.
  */
 export async function executeReminderPipeline(
   options: PipelineOptions = {}
@@ -95,15 +118,31 @@ export async function executeReminderPipeline(
   const now = options.now ?? new Date();
   const timezone = config.reminderTimezone;
   const runDate = formatTzDate(now, timezone);
-  const runKey = runDate;
+
+  // Derive run key based on run type
+  let runKey: string;
+  if (options.customRunKey) {
+    runKey = options.customRunKey;
+  } else if (options.dryRun) {
+    runKey = formatDryRunKey();
+  } else if (options.targetUsername) {
+    runKey = formatTestRunKey(options.targetUsername);
+  } else if (options.runType === "manual") {
+    runKey = formatManualRunKey();
+  } else {
+    // Default: scheduled run for today
+    runKey = formatScheduledRunKey(runDate);
+  }
 
   logger.info({
     msg: "reminder pipeline starting",
     run_key: runKey,
+    run_date: runDate,
     dry_run: options.dryRun ?? false,
+    deliver_telegram: options.deliverTelegram ?? true,
   });
 
-  // Initialize API clients (using BaseApiClient as retry authority)
+  // Initialize Base API clients
   const accountClient = new AccountApiClient(
     config.baseAccountToken,
     config.baseApiTimeoutMs,
@@ -159,6 +198,7 @@ export async function executeReminderPipeline(
           usersReady: 0,
           usersPartial: 0,
           usersError: existingRun?.users_error ?? 0,
+          usersDelivered: existingRun?.users_delivered ?? 0,
           digests: [],
           durationMs: Date.now() - startMs,
           skipped: true,
@@ -240,7 +280,7 @@ export async function executeReminderPipeline(
       // 2. Workflow Collector
       let workflowResult: ModuleResult<ActionableJob>;
       try {
-        const jobs = await collectWorkflowJobs(workflowClient, user.username);
+        const jobs = await collectWorkflowJobs(workflowClient, user.username, timezone, now);
         workflowResult = { status: "ok", items: jobs };
         recordModuleSuccess("workflow");
       } catch (err) {
@@ -259,7 +299,7 @@ export async function executeReminderPipeline(
       // 3. Request Collector
       let requestResult: ModuleResult<ActionableRequest>;
       try {
-        const requests = await collectActionableRequests(requestClient, user.username);
+        const requests = await collectActionableRequests(requestClient, user.username, timezone, now);
         requestResult = { status: "ok", items: requests };
         recordModuleSuccess("request");
       } catch (err) {
@@ -280,6 +320,7 @@ export async function executeReminderPipeline(
         baseUserId: user.id,
         username: user.username,
         displayName: user.display_name,
+        runDate,
         wework: weworkResult,
         workflow: workflowResult,
         request: requestResult,
@@ -297,9 +338,8 @@ export async function executeReminderPipeline(
   const usersReady = digests.filter((d) => d.status === "ready").length;
   const usersPartial = digests.filter((d) => d.status === "partial").length;
   const usersError = digests.filter((d) => d.status === "error").length;
-  const durationMs = Date.now() - startMs;
 
-  // --- Step 6: Store Delivery Records (if not dry-run) ---
+  // --- Step 6: Store Initial Delivery Records (if not dry-run) ---
   if (!options.dryRun && runId) {
     const deliveryItems: DeliveryInsertItem[] = digests.map((d) => {
       let deliveryStatus: DeliveryInsertItem["status"];
@@ -327,7 +367,57 @@ export async function executeReminderPipeline(
     });
 
     await batchInsertDeliveries(runId, deliveryItems);
+  }
 
+  // --- Step 7: Telegram Delivery Phase ---
+  let deliverySummary: RunDeliverySummary | undefined;
+  const shouldDeliver = options.deliverTelegram !== false && !options.dryRun && !!runId;
+
+  if (shouldDeliver && runId) {
+    await updateReminderRun(runId, {
+      status: "delivering",
+    });
+
+    let tgClient = options.telegramClient;
+    if (!tgClient) {
+      try {
+        const tgConfig = loadTelegramConfig();
+        tgClient = new TelegramClient(new Api(tgConfig.botToken));
+      } catch (err) {
+        logger.error({
+          msg: "failed to initialize telegram client for delivery",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    if (tgClient) {
+      const deliveryService = new DeliveryService(tgClient);
+      deliverySummary = await deliveryService.deliverRun({
+        runId,
+        users: activeUsers,
+        digests,
+      });
+
+      await updateReminderRun(runId, {
+        status: "completed",
+        users_total: activeUsers.length,
+        users_delivered: deliverySummary.delivered,
+        users_empty: deliverySummary.empty,
+        users_error: deliverySummary.error,
+        completed_at: new Date(),
+      });
+    } else {
+      logger.warn({ msg: "skipping telegram delivery because TelegramClient is not configured" });
+      await updateReminderRun(runId, {
+        status: "completed",
+        users_total: activeUsers.length,
+        users_empty: usersEmpty,
+        users_error: usersError,
+        completed_at: new Date(),
+      });
+    }
+  } else if (!options.dryRun && runId) {
     await updateReminderRun(runId, {
       status: "completed",
       users_total: activeUsers.length,
@@ -337,15 +427,17 @@ export async function executeReminderPipeline(
     });
   }
 
-  // --- Step 7: Update Passive Health Status ---
+  const durationMs = Date.now() - startMs;
+
+  // --- Step 8: Update Passive Health Status ---
   recordLastReminderRun({
     date: runDate,
     status: "completed",
     total: activeUsers.length,
-    empty: usersEmpty,
+    empty: deliverySummary?.empty ?? usersEmpty,
     ready: usersReady,
     partial: usersPartial,
-    error: usersError,
+    error: deliverySummary?.error ?? usersError,
     durationMs,
   });
 
@@ -354,9 +446,10 @@ export async function executeReminderPipeline(
     run_key: runKey,
     total_users: activeUsers.length,
     users_ready: usersReady,
-    users_empty: usersEmpty,
+    users_empty: deliverySummary?.empty ?? usersEmpty,
     users_partial: usersPartial,
-    users_error: usersError,
+    users_error: deliverySummary?.error ?? usersError,
+    users_delivered: deliverySummary?.delivered ?? 0,
     duration_ms: durationMs,
   });
 
@@ -365,10 +458,13 @@ export async function executeReminderPipeline(
     runKey,
     runDate,
     totalUsers: activeUsers.length,
-    usersEmpty,
+    usersEmpty: deliverySummary?.empty ?? usersEmpty,
     usersReady,
     usersPartial,
-    usersError,
+    usersError: deliverySummary?.error ?? usersError,
+    usersDelivered: deliverySummary?.delivered ?? 0,
+    usersSkipped: deliverySummary?.skipped ?? 0,
+    deliverySummary,
     digests,
     durationMs,
   };

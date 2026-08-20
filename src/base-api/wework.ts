@@ -26,6 +26,8 @@ export interface BaseWeworkTask {
   user_id?: number;
   username?: string;
   status: string;
+  /** "0" / 0 = not under review, "1" / 1 = currently submitted for review */
+  review?: string | number;
   has_deadline?: string | number;
   deadline?: string | number;
   deadline_has_time?: number;
