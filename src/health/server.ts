@@ -8,6 +8,7 @@
  *  - GET /health → JSON response
  *  - Database: active ping (latency_ms)
  *  - Base API: passive (last successful call timestamp recorded externally)
+ *  - Telegram Bot: passive status tracking (up/down/disabled)
  *  - No active Base API pings during health check
  *  - No secrets, tokens, emails, or user data in response
  *  - Uses Node.js built-in http module (no express dependency)
@@ -29,6 +30,12 @@ const lastBaseApiSuccess: Record<string, Date | null> = {
   workflow: null,
   request: null,
 };
+
+let telegramBotStatus: "up" | "down" | "disabled" = "disabled";
+
+export function recordTelegramBotStatus(status: "up" | "down" | "disabled"): void {
+  telegramBotStatus = status;
+}
 
 /**
  * Called by Base API adapters after a successful request.
@@ -62,17 +69,21 @@ export function recordLastReminderRun(info: LastReminderRunInfo): void {
 // Response builders
 // ---------------------------------------------------------------------------
 
-type CheckStatus = "up" | "down";
+type CheckStatus = "up" | "down" | "disabled";
 
 interface DatabaseCheck {
-  status: CheckStatus;
+  status: "up" | "down";
   latency_ms?: number;
   error?: string;
 }
 
 interface BaseApiCheck {
-  status: CheckStatus;
+  status: "up" | "down";
   last_success: string | null;
+}
+
+interface TelegramBotCheck {
+  status: CheckStatus;
 }
 
 interface HealthResponse {
@@ -84,6 +95,7 @@ interface HealthResponse {
     base_api_wework: BaseApiCheck;
     base_api_workflow: BaseApiCheck;
     base_api_request: BaseApiCheck;
+    telegram_bot?: TelegramBotCheck;
     last_reminder_run?: LastReminderRunInfo | null;
   };
 }
@@ -110,7 +122,7 @@ async function buildHealthResponse(): Promise<{
   function baseApiCheck(module: string): BaseApiCheck {
     const lastSuccess = lastBaseApiSuccess[module];
     return {
-      status: lastSuccess !== null ? "up" : "up", // unknown = up (no ping attempted)
+      status: "up",
       last_success: lastSuccess ? lastSuccess.toISOString() : null,
     };
   }
@@ -127,7 +139,11 @@ async function buildHealthResponse(): Promise<{
               new Date(dbRun.started_at).getTime()
             : 0;
 
-        const runDateStr = dbRun.run_key ?? (typeof dbRun.run_date === "string" ? dbRun.run_date.slice(0, 10) : new Date(dbRun.run_date).toISOString().slice(0, 10));
+        const runDateStr =
+          dbRun.run_key ??
+          (typeof dbRun.run_date === "string"
+            ? dbRun.run_date.slice(0, 10)
+            : new Date(dbRun.run_date).toISOString().slice(0, 10));
 
         latestRunInfo = {
           date: runDateStr,
@@ -157,6 +173,7 @@ async function buildHealthResponse(): Promise<{
       base_api_wework: baseApiCheck("wework"),
       base_api_workflow: baseApiCheck("workflow"),
       base_api_request: baseApiCheck("request"),
+      telegram_bot: { status: telegramBotStatus },
       last_reminder_run: latestRunInfo,
     },
   };

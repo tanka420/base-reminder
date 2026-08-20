@@ -24,9 +24,9 @@ export function initPool(databaseUrl: string): void {
   }
   pool = new Pool({
     connectionString: databaseUrl,
-    max: 10,
+    max: 20,
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
+    connectionTimeoutMillis: 10_000,
   });
 
   pool.on("error", (err) => {

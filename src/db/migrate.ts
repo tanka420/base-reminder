@@ -145,10 +145,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.log("Migrations finished.");
     })
     .catch((err: unknown) => {
-      console.error(
-        "Migration error:",
-        err instanceof Error ? err.message : err
-      );
+      console.error("Migration error:", err);
       process.exit(1);
     })
     .finally(() => closePool());

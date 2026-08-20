@@ -1,14 +1,16 @@
 /**
  * src/config/index.ts
  *
- * Production configuration loader.
+ * Production configuration loader with subsystem isolation.
  *
  * Security rules:
- *  - All secret fields (tokens, DB password inside DATABASE_URL) are loaded once
- *    and held in memory. They are NEVER logged, never serialized to JSON for
+ *  - All secret fields (tokens, DB password inside DATABASE_URL, SMTP pass, bot token)
+ *    are loaded once and held in memory. They are NEVER logged, never serialized to JSON for
  *    inspection, and never returned via health endpoints.
  *  - Config object uses readonly properties. No runtime mutation.
- *  - Fail fast: any missing required field throws at process startup.
+ *  - Fail fast: missing required fields throw at subsystem startup.
+ *  - Subsystem isolation: core CLI commands (migrate, sync:users, digest:preview) do NOT
+ *    require Telegram or SMTP secrets.
  */
 
 import "dotenv/config";
@@ -17,7 +19,7 @@ import "dotenv/config";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface Config {
+export interface CoreConfig {
   readonly nodeEnv: "production" | "development" | "test";
   readonly logLevel: string;
 
@@ -38,7 +40,7 @@ export interface Config {
   // --- Scheduler ---
   readonly reminderTimezone: string;
   readonly reminderCron: string;
-  /** Whether the automatic cron scheduler runs in background (default: false in M1B) */
+  /** Whether the automatic cron scheduler runs in background (default: false in M1B/M2A) */
   readonly enableCronScheduler: boolean;
 
   // --- Health endpoint ---
@@ -50,68 +52,98 @@ export interface Config {
   // --- Base API client tuning ---
   readonly baseApiTimeoutMs: number;
   readonly baseApiConcurrency: number;
+
+  // --- Telegram feature flag ---
+  readonly enableTelegramBot: boolean;
+}
+
+export type Config = CoreConfig;
+
+export interface TelegramConfig {
+  /** Telegram Bot token from @BotFather. Never log. */
+  readonly botToken: string;
+  readonly enableTelegramBot: boolean;
+}
+
+export interface SmtpConfig {
+  readonly host: string;
+  readonly port: number;
+  readonly secure: boolean;
+  readonly requireTls: boolean;
+  /** SMTP username. Never log. */
+  readonly user: string;
+  /** SMTP password. Never log. */
+  readonly pass: string;
+  readonly from: string;
+
+  // --- OTP settings ---
+  readonly otpTtlMinutes: number;
+  readonly otpMaxAttempts: number;
+  readonly otpRateLimitWindowMinutes: number;
+  readonly otpRateLimitMaxRequests: number;
 }
 
 // ---------------------------------------------------------------------------
-// Loader
+// Helpers
+// ---------------------------------------------------------------------------
+
+function requireEnv(key: string, missing: string[]): string {
+  const value = process.env[key];
+  if (value === undefined || value.trim() === "") {
+    missing.push(key);
+    return "";
+  }
+  return value.trim();
+}
+
+function optionalEnv(key: string, defaultValue: string): string {
+  const value = process.env[key];
+  if (value === undefined || value.trim() === "") return defaultValue;
+  return value.trim();
+}
+
+function optionalIntEnv(key: string, defaultValue: number, missing: string[]): number {
+  const raw = process.env[key];
+  if (raw === undefined || raw.trim() === "") return defaultValue;
+  const parsed = parseInt(raw.trim(), 10);
+  if (Number.isNaN(parsed)) {
+    missing.push(`${key} (must be an integer, got: "${raw}")`);
+    return defaultValue;
+  }
+  return parsed;
+}
+
+// ---------------------------------------------------------------------------
+// Core Config Loader
 // ---------------------------------------------------------------------------
 
 /**
- * Load and validate all required configuration from environment variables.
- * Throws a descriptive Error (listing ALL missing variables) if any required
- * variable is absent or empty.
- *
- * Call once at process startup. Pass the result through dependency injection;
- * do not call `process.env` in application code.
+ * Load and validate core configuration required for all operations.
+ * Does NOT require Telegram or SMTP variables.
  */
-export function loadConfig(): Config {
+export function loadCoreConfig(): CoreConfig {
   const missing: string[] = [];
 
-  function require(key: string): string {
-    const value = process.env[key];
-    if (value === undefined || value.trim() === "") {
-      missing.push(key);
-      return "";
-    }
-    return value.trim();
-  }
-
-  function optional(key: string, defaultValue: string): string {
-    const value = process.env[key];
-    if (value === undefined || value.trim() === "") return defaultValue;
-    return value.trim();
-  }
-
-  function optionalInt(key: string, defaultValue: number): number {
-    const raw = process.env[key];
-    if (raw === undefined || raw.trim() === "") return defaultValue;
-    const parsed = parseInt(raw.trim(), 10);
-    if (Number.isNaN(parsed)) {
-      missing.push(`${key} (must be an integer, got: "${raw}")`);
-      return defaultValue;
-    }
-    return parsed;
-  }
-
-  // Required fields
-  const databaseUrl = require("DATABASE_URL");
-  const baseAccountToken = require("BASE_ACCOUNT_TOKEN");
-  const baseWeWorkToken = require("BASE_WEWORK_TOKEN");
-  const baseWorkflowToken = require("BASE_WORKFLOW_TOKEN");
-  const baseRequestToken = require("BASE_REQUEST_TOKEN");
+  // Required core fields
+  const databaseUrl = requireEnv("DATABASE_URL", missing);
+  const baseAccountToken = requireEnv("BASE_ACCOUNT_TOKEN", missing);
+  const baseWeWorkToken = requireEnv("BASE_WEWORK_TOKEN", missing);
+  const baseWorkflowToken = requireEnv("BASE_WORKFLOW_TOKEN", missing);
+  const baseRequestToken = requireEnv("BASE_REQUEST_TOKEN", missing);
 
   // Optional with defaults
-  const nodeEnvRaw = optional("NODE_ENV", "production");
-  const logLevel = optional("LOG_LEVEL", "info");
-  const reminderTimezone = optional("REMINDER_TIMEZONE", "Asia/Ho_Chi_Minh");
-  const reminderCron = optional("REMINDER_CRON", "15 8 * * 1-5");
-  const enableCronScheduler = optional("ENABLE_CRON_SCHEDULER", "false").toLowerCase() === "true";
-  const healthHost = optional("HEALTH_HOST", "127.0.0.1");
-  const healthPort = optionalInt("HEALTH_PORT", 3000);
-  const baseApiTimeoutMs = optionalInt("BASE_API_TIMEOUT_MS", 15_000);
-  const baseApiConcurrency = optionalInt("BASE_API_CONCURRENCY", 3);
+  const nodeEnvRaw = optionalEnv("NODE_ENV", "production");
+  const logLevel = optionalEnv("LOG_LEVEL", "info");
+  const reminderTimezone = optionalEnv("REMINDER_TIMEZONE", "Asia/Ho_Chi_Minh");
+  const reminderCron = optionalEnv("REMINDER_CRON", "15 8 * * 1-5");
+  const enableCronScheduler = optionalEnv("ENABLE_CRON_SCHEDULER", "false").toLowerCase() === "true";
+  const healthHost = optionalEnv("HEALTH_HOST", "127.0.0.1");
+  const healthPort = optionalIntEnv("HEALTH_PORT", 3000, missing);
+  const baseApiTimeoutMs = optionalIntEnv("BASE_API_TIMEOUT_MS", 15_000, missing);
+  const baseApiConcurrency = optionalIntEnv("BASE_API_CONCURRENCY", 3, missing);
+  const enableTelegramBot = optionalEnv("ENABLE_TELEGRAM_BOT", "false").toLowerCase() === "true";
 
-  // Fail fast — collect ALL missing before throwing
+  // Fail fast on core missing variables
   if (missing.length > 0) {
     throw new Error(
       `[config] Missing required environment variables:\n  ${missing.join("\n  ")}\n` +
@@ -123,7 +155,7 @@ export function loadConfig(): Config {
     nodeEnvRaw === "development" || nodeEnvRaw === "test"
       ? nodeEnvRaw
       : "production"
-  ) as Config["nodeEnv"];
+  ) as CoreConfig["nodeEnv"];
 
   return Object.freeze({
     nodeEnv,
@@ -140,5 +172,86 @@ export function loadConfig(): Config {
     healthPort,
     baseApiTimeoutMs,
     baseApiConcurrency,
+    enableTelegramBot,
+  });
+}
+
+/**
+ * Default config loader (alias for loadCoreConfig for backward compatibility).
+ */
+export function loadConfig(): Config {
+  return loadCoreConfig();
+}
+
+// ---------------------------------------------------------------------------
+// Telegram Config Loader
+// ---------------------------------------------------------------------------
+
+/**
+ * Load and validate Telegram bot configuration.
+ * Call only when Telegram bot service is enabled.
+ */
+export function loadTelegramConfig(): TelegramConfig {
+  const missing: string[] = [];
+
+  const botToken = requireEnv("TELEGRAM_BOT_TOKEN", missing);
+  const enableTelegramBot = optionalEnv("ENABLE_TELEGRAM_BOT", "false").toLowerCase() === "true";
+
+  if (missing.length > 0) {
+    throw new Error(
+      `[config:telegram] Missing required Telegram environment variables:\n  ${missing.join("\n  ")}\n` +
+        "Provide TELEGRAM_BOT_TOKEN to start the Telegram bot."
+    );
+  }
+
+  return Object.freeze({
+    botToken,
+    enableTelegramBot,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// SMTP / OTP Config Loader
+// ---------------------------------------------------------------------------
+
+/**
+ * Load and validate SMTP & OTP configuration.
+ * Call only when OTP delivery / verification service is started.
+ */
+export function loadSmtpConfig(): SmtpConfig {
+  const missing: string[] = [];
+
+  const host = requireEnv("SMTP_HOST", missing);
+  const port = optionalIntEnv("SMTP_PORT", 587, missing);
+  const secure = optionalEnv("SMTP_SECURE", "false").toLowerCase() === "true";
+  const requireTls = optionalEnv("SMTP_REQUIRE_TLS", "true").toLowerCase() === "true";
+  const user = requireEnv("SMTP_USER", missing);
+  const pass = requireEnv("SMTP_PASS", missing);
+  const from = optionalEnv("SMTP_FROM", `"Base Reminder" <${user}>`);
+
+  const otpTtlMinutes = optionalIntEnv("OTP_TTL_MINUTES", 10, missing);
+  const otpMaxAttempts = optionalIntEnv("OTP_MAX_ATTEMPTS", 5, missing);
+  const otpRateLimitWindowMinutes = optionalIntEnv("OTP_RATE_LIMIT_WINDOW_MINUTES", 15, missing);
+  const otpRateLimitMaxRequests = optionalIntEnv("OTP_RATE_LIMIT_MAX_REQUESTS", 5, missing);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `[config:smtp] Missing required SMTP environment variables:\n  ${missing.join("\n  ")}\n` +
+        "Provide SMTP_HOST, SMTP_USER, SMTP_PASS to enable email OTP delivery."
+    );
+  }
+
+  return Object.freeze({
+    host,
+    port,
+    secure,
+    requireTls,
+    user,
+    pass,
+    from,
+    otpTtlMinutes,
+    otpMaxAttempts,
+    otpRateLimitWindowMinutes,
+    otpRateLimitMaxRequests,
   });
 }
