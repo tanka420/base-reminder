@@ -1,7 +1,7 @@
 {
   "name": "base-reminder",
   "version": "0.1.0",
-  "description": "Telegram Reminder integrated with Base.vn — M1A: Core Foundation",
+  "description": "Internal Base.vn to Telegram morning reminder system",
   "private": true,
   "type": "module",
   "scripts": {

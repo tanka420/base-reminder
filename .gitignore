@@ -1,5 +1,7 @@
-# Environment — NEVER commit real tokens
+# Environment — NEVER commit real tokens or credentials
 .env
+.env*
+!.env.example
 
 # Dependencies
 node_modules/
@@ -7,25 +9,45 @@ node_modules/
 # Build output
 dist/
 
-# Sanitized responses (generated at probe runtime — exclude from repo)
-docs/sample-responses/*.json
-!docs/sample-responses/.gitkeep
-!docs/sample-responses/sign-completed-sample.sanitized.json
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
+# Test coverage
+coverage/
 
 # Logs
+logs/
 *.log
 npm-debug.log*
-logs/
+yarn-debug.log*
+yarn-error.log*
+
+# Database dumps & backup files
+*.dump
+*.sql.gz
+*.tar.gz
+*.bak
+backups/
 
 # Local Compose Overrides
 docker-compose.override.yml
 docker-compose.local.yml
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Scratch and temporary runtime files
+scratch/
+tmp/
+*.tmp
+
+# Sanitized probe runtime responses (exclude dynamic generated responses except fixed fixtures)
+docs/sample-responses/*.json
+!docs/sample-responses/.gitkeep
+!docs/sample-responses/sign-completed-sample.sanitized.json
+
 

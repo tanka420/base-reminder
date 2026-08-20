@@ -1,15 +1,15 @@
 /**
  * src/index.ts
  *
- * Application entry point — Milestone 2A.
+ * Application entry point.
  *
  * Startup sequence:
  *  1. Load and validate core config (fail fast on missing required vars)
  *  2. Initialize logger
  *  3. Initialize database pool
- *  4. Run migrations (001, 002, 003)
+ *  4. Run migrations (001, 002, 003, 004)
  *  5. Start health endpoint
- *  6. Initialize Scheduler Framework (disabled by default in M1B/M2A)
+ *  6. Initialize Scheduler Framework (disabled by default)
  *  7. Start Telegram Bot if ENABLE_TELEGRAM_BOT=true (subsystem isolation)
  *  8. Register graceful shutdown handlers
  */
@@ -101,7 +101,7 @@ async function main(): Promise<void> {
   }
 
   logger.info({
-    msg: "m2a system ready",
+    msg: "base-reminder system ready",
     health_url: `http://${config.healthHost}:${config.healthPort}/health`,
     cron_scheduler_enabled: config.enableCronScheduler,
     telegram_bot_enabled: config.enableTelegramBot,

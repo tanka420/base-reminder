@@ -22,6 +22,9 @@ COPY src/ ./src/
 # Compile production source (excludes test files)
 RUN npx tsc --project tsconfig.build.json
 
+# Prune dev dependencies so runtime only receives production modules
+RUN npm prune --omit=dev --ignore-scripts
+
 ###############################################################################
 # Stage 3: runtime — minimal production image
 ###############################################################################
@@ -33,7 +36,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 
 # Copy production deps only
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json
 
 # Copy compiled output

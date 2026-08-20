@@ -40,7 +40,7 @@ export interface CoreConfig {
   // --- Scheduler ---
   readonly reminderTimezone: string;
   readonly reminderCron: string;
-  /** Whether the automatic cron scheduler runs in background (default: false in M1B/M2A) */
+  /** Whether the automatic cron scheduler runs in background (default: false) */
   readonly enableCronScheduler: boolean;
   /** Hour (0-23) after which missed morning runs are no longer automatically executed (default: 10) */
   readonly missedRunCutoffHour: number;

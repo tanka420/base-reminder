@@ -1,17 +1,18 @@
-# docker-compose.yml — Base Reminder M1A
+# docker-compose.yml — Base Reminder Production Compose
 #
-# Security defaults (per architecture-review.md v1.1 §14.3):
-#  - PostgreSQL port 5432 is NOT published externally
+# Operational Invariant:
+#  - NEVER scale the app service (e.g. do NOT run docker compose up --scale app=2).
+#    Telegram long polling requires exactly ONE poller process per bot token.
+#
+# Security defaults:
+#  - PostgreSQL port 5432 is NOT published externally (accessible only via internal network)
 #  - Health endpoint binds to 127.0.0.1 inside container (HEALTH_HOST=127.0.0.1)
-#    and is NOT mapped to a host port
 #  - restart: unless-stopped for both services
-#  - PostgreSQL data persists on named volume (not bind mount)
+#  - PostgreSQL data persists on named volume (pgdata)
 #
 # Local development overrides:
-#  To access DB from host tools (DBeaver, psql CLI), add this to db service:
-#    ports:
-#      - "127.0.0.1:5432:5432"
-#  Do NOT commit the ports line — keep it commented out.
+#  Use docker-compose.local.yml for local port mapping:
+#    docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db
 
 services:
   app:
