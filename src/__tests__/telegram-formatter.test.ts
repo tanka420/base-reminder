@@ -424,7 +424,7 @@ describe("Telegram Digest Formatter", () => {
 
       // Schedule footer
       expect(msg).toContain("⏰ <b>Lịch nhắc việc:</b>\nThứ 2 - Thứ 6 lúc 08:00");
-      expect(msg).toContain("🌏 <b>Múi giờ:</b>\nAsia/Ho_Chi_Minh");
+      expect(msg).not.toContain("Múi giờ");
       expect(msg).toContain("Bạn có thể xem các chức năng hỗ trợ tại Menu của bot.");
     });
 

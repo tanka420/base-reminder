@@ -169,7 +169,7 @@ describe("Telegram Bot Handlers & Middlewares", () => {
       expect(replyText).toContain("🔗 <b>Trạng thái:</b>\nĐã liên kết");
       expect(replyText).toContain("🔔 <b>Nhắc việc:</b>\nĐang bật");
       expect(replyText).toContain("⏰ <b>Lịch nhắc việc:</b>\nThứ 2 - Thứ 6 lúc 08:00");
-      expect(replyText).toContain("🌏 <b>Múi giờ:</b>\nAsia/Ho_Chi_Minh");
+      expect(replyText).not.toContain("Múi giờ");
     });
   });
 

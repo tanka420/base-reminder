@@ -43,8 +43,6 @@ export function createStatusHandler(linkingService: LinkingService) {
         `${reminderStatus}\n\n` +
         `⏰ <b>Lịch nhắc việc:</b>\n` +
         `Thứ 2 - Thứ 6 lúc 08:00\n\n` +
-        `🌏 <b>Múi giờ:</b>\n` +
-        `Asia/Ho_Chi_Minh\n\n` +
         `• <b>Email:</b> ${escapeHtml(maskEmail(activeLink.email))}\n` +
         `• <b>Ngày liên kết:</b> ${formattedDate}\n\n` +
         `<i>Dùng /stop để tạm dừng, /resume để bật lại, hoặc /unlink để hủy liên kết.</i>`,

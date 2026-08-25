@@ -390,8 +390,6 @@ export function formatWelcomeDigest(
     `\n\n---\n\n` +
     `⏰ <b>Lịch nhắc việc:</b>\n` +
     `Thứ 2 - Thứ 6 lúc 08:00\n\n` +
-    `🌏 <b>Múi giờ:</b>\n` +
-    `Asia/Ho_Chi_Minh\n\n` +
     `Bạn có thể xem các chức năng hỗ trợ tại Menu của bot.`;
 
   const failedModules = getFailedModuleNames(digest);

@@ -35,7 +35,7 @@ Base Reminder is an automated service that consolidates pending actionable items
 - **Onboarding Digest Preview**: Immediately upon successful account linking, the bot sends an educational preview digest demonstrating how daily morning reminders work with live tasks or zero-state placeholders.
 - **Commands**:
   - `/start`: Initiates onboarding or greets linked users.
-  - `/status`: Displays linked Base username, Telegram link status, reminder toggle status, and scheduled morning reminder time (08:00 Asia/Ho_Chi_Minh).
+  - `/status`: Displays linked Base username, Telegram link status, reminder toggle status, and scheduled morning reminder time (08:00 Thứ 2 - Thứ 6).
   - `/stop`: Pauses daily morning reminders.
   - `/resume`: Resumes daily morning reminders.
   - `/unlink`: Unlinks Telegram account from Base user (protected with email OTP confirmation).
