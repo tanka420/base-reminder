@@ -87,7 +87,10 @@ export class WelcomeDigestService {
     }
 
     if ("sendMessage" in this.#telegramSender && typeof this.#telegramSender.sendMessage === "function") {
-      const res = await this.#telegramSender.sendMessage(chatId, text);
+      const res = await this.#telegramSender.sendMessage(chatId, text, {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+      });
       if (res && typeof res === "object" && "success" in res && !res.success) {
         throw new Error(`Telegram client delivery failed: ${(res as any).errorCode ?? "UNKNOWN"}`);
       }

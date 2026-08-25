@@ -45,7 +45,10 @@ export function createStatusHandler(linkingService: LinkingService) {
         `• <b>Email:</b> ${escapeHtml(maskEmail(activeLink.email))}\n` +
         `• <b>Ngày liên kết:</b> ${formattedDate}\n\n` +
         `<i>Dùng /stop để tạm dừng, /resume để bật lại, hoặc /unlink để hủy liên kết.</i>`,
-      { parse_mode: "HTML" }
+      {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+      }
     );
   };
 }

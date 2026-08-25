@@ -133,7 +133,10 @@ export async function initTelegramBot(
   const linkingService = new LinkingService(async (chatId, message) => {
     if (bot) {
       const targetChatId = typeof chatId === "bigint" ? String(chatId) : chatId;
-      await bot.api.sendMessage(targetChatId, message, { parse_mode: "HTML" });
+      await bot.api.sendMessage(targetChatId, message, {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+      });
     }
   });
 
@@ -144,7 +147,10 @@ export async function initTelegramBot(
     telegramSender: async (chatId, message) => {
       if (bot) {
         const targetChatId = typeof chatId === "bigint" ? String(chatId) : chatId;
-        await bot.api.sendMessage(targetChatId, message, { parse_mode: "HTML" });
+        await bot.api.sendMessage(targetChatId, message, {
+          parse_mode: "HTML",
+          link_preview_options: { is_disabled: true },
+        });
       }
     },
     timezone: reminderTimezone,
