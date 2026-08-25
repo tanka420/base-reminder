@@ -165,10 +165,13 @@ describe("Telegram Bot Handlers & Middlewares", () => {
         expect.objectContaining({ parse_mode: "HTML" })
       );
       const replyText = String(reply.mock.calls[0]?.[0] ?? "");
-      expect(replyText).toContain("🧑 <b>Base:</b>\n@Digital01 (Mai Thanh Tân)");
-      expect(replyText).toContain("🔗 <b>Trạng thái:</b>\nĐã liên kết");
-      expect(replyText).toContain("🔔 <b>Nhắc việc:</b>\nĐang bật");
-      expect(replyText).toContain("⏰ <b>Lịch nhắc việc:</b>\nThứ 2 - Thứ 6 lúc 08:00");
+      expect(replyText).toContain("🧑 <b>Tài khoản Base:</b>");
+      expect(replyText).toContain("• <b>Họ tên:</b> Mai Thanh Tân");
+      expect(replyText).toContain("• <b>Username:</b> <code>Digital01</code>");
+      expect(replyText).toContain("🔔 <b>Nhắc việc:</b>\n• Đang bật\n• Thứ 2 - Thứ 6 lúc 08:00");
+      expect(replyText).toContain("🔗 <b>Thông tin liên kết:</b>");
+      expect(replyText).toContain("• <b>Email:</b> t***n@company.com");
+      expect(replyText).toContain("• <b>Ngày liên kết:</b>");
       expect(replyText).not.toContain("Múi giờ");
     });
   });

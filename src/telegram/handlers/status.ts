@@ -35,14 +35,13 @@ export function createStatusHandler(linkingService: LinkingService) {
 
     await ctx.reply(
       `📊 <b>Thông tin tài khoản</b>\n\n` +
-        `🧑 <b>Base:</b>\n` +
-        `@${escapeHtml(activeLink.username)} (${escapeHtml(activeLink.display_name)})\n\n` +
-        `🔗 <b>Trạng thái:</b>\n` +
-        `Đã liên kết\n\n` +
+        `🧑 <b>Tài khoản Base:</b>\n` +
+        `• <b>Họ tên:</b> ${escapeHtml(activeLink.display_name)}\n` +
+        `• <b>Username:</b> <code>${escapeHtml(activeLink.username)}</code>\n\n` +
         `🔔 <b>Nhắc việc:</b>\n` +
-        `${reminderStatus}\n\n` +
-        `⏰ <b>Lịch nhắc việc:</b>\n` +
-        `Thứ 2 - Thứ 6 lúc 08:00\n\n` +
+        `• ${reminderStatus}\n` +
+        `• Thứ 2 - Thứ 6 lúc 08:00\n\n` +
+        `🔗 <b>Thông tin liên kết:</b>\n` +
         `• <b>Email:</b> ${escapeHtml(maskEmail(activeLink.email))}\n` +
         `• <b>Ngày liên kết:</b> ${formattedDate}\n\n` +
         `<i>Dùng /stop để tạm dừng, /resume để bật lại, hoặc /unlink để hủy liên kết.</i>`,
