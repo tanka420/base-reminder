@@ -10,7 +10,7 @@ export function createHelpHandler() {
   return async (ctx: Context): Promise<void> => {
     await ctx.reply(
       `🤖 <b>Hướng dẫn sử dụng Base Reminder Bot</b>\n\n` +
-        `Bot giúp bạn theo dõi và nhận thông báo công việc quá hạn / đến hạn từ Base.vn mỗi sáng lúc 08:15.\n\n` +
+        `Bot giúp bạn theo dõi và nhận thông báo công việc quá hạn / đến hạn từ Base.vn mỗi sáng lúc 08:00.\n\n` +
         `<b>Danh sách các lệnh:</b>\n` +
         `• /start — Bắt đầu liên kết tài khoản Base hoặc xem trạng thái\n` +
         `• /status — Xem thông tin tài khoản Base đang liên kết\n` +

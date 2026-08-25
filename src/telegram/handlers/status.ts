@@ -26,7 +26,7 @@ export function createStatusHandler(linkingService: LinkingService) {
     }
 
     const reminderStatus = activeLink.reminders_enabled
-      ? "✅ Đang bật (Nhận lúc 08:15 các ngày trong tuần)"
+      ? "✅ Đang bật (Nhận lúc 08:00 các ngày trong tuần)"
       : "⏸ Đang tạm dừng (Dùng /resume để bật lại)";
 
     const formattedDate = new Date(activeLink.linked_at).toLocaleString("vi-VN", {

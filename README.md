@@ -42,7 +42,7 @@ Base Reminder is an automated service that consolidates pending actionable items
 
 ### Morning Reminders
 
-- **Schedule**: Monday through Friday at **08:15 (Asia/Ho_Chi_Minh)**.
+- **Schedule**: Monday through Friday at **08:00 (Asia/Ho_Chi_Minh)**.
 - **Scheduler flag**: Disabled by default (`ENABLE_CRON_SCHEDULER=false`) until explicitly enabled in production.
 - **Item Filtering**:
   - **Wework**: Incomplete tasks overdue or due today. Tasks in review (`review=1`) are excluded.
@@ -61,7 +61,7 @@ Base Reminder is an automated service that consolidates pending actionable items
 
 ```text
                ┌───────────────────────────────────────────┐
-               │           Scheduled Cron (08:15)          │
+               │           Scheduled Cron (08:00)          │
                └─────────────────────┬─────────────────────┘
                                      ▼
  ┌───────────────┐          ┌─────────────────┐          ┌─────────────────┐
@@ -159,7 +159,7 @@ npm run build
 | `SMTP_PASS` | SMTP application password | - | When bot enabled |
 | `SMTP_FROM` | Sender display name & address | `"Base Reminder" <...>` | No |
 | `ENABLE_CRON_SCHEDULER` | Run automatic morning reminders | `false` | Yes |
-| `REMINDER_CRON` | Cron schedule expression | `"15 8 * * 1-5"` | No |
+| `REMINDER_CRON` | Cron schedule expression | `"0 8 * * 1-5"` | No |
 | `REMINDER_TIMEZONE` | Cron timezone | `Asia/Ho_Chi_Minh` | No |
 | `MISSED_RUN_CUTOFF_HOUR` | Cutoff hour for missed morning runs | `10` | No |
 | `HEALTH_HOST` | Internal health check bind host | `127.0.0.1` | No |
@@ -216,7 +216,7 @@ npm run migrate
 3. Bot generates a 6-digit numeric OTP and sends it to the user's corporate email.
 4. User enters the OTP in Telegram.
 5. Bot verifies OTP (bcrypt hash, 10-minute TTL, max 5 attempts) and activates the account link.
-6. Daily morning reminders are now delivered automatically at 08:15 Mon-Fri.
+6. Daily morning reminders are now delivered automatically at 08:00 Mon-Fri.
 
 ---
 

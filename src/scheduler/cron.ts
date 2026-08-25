@@ -4,7 +4,7 @@
  * Production Cron Scheduler with Missed-Run Cutoff & Dual-Axis Idempotency.
  *
  * Default configuration:
- *  - 08:15 Asia/Ho_Chi_Minh (Mon-Fri)
+ *  - 08:00 Asia/Ho_Chi_Minh (Mon-Fri)
  *  - Missed-run cutoff: 10:00 Asia/Ho_Chi_Minh
  *  - Disabled by default (ENABLE_CRON_SCHEDULER=false)
  */
@@ -31,9 +31,9 @@ export function isWeekdayInTimezone(now: Date, timezone: string): boolean {
 }
 
 /**
- * Check if the current time has passed the scheduled morning time (default 08:15).
+ * Check if the current time has passed the scheduled morning time (default 08:00).
  */
-export function isAfterMorningTime(now: Date, timezone: string, hour = 8, minute = 15): boolean {
+export function isAfterMorningTime(now: Date, timezone: string, hour = 8, minute = 0): boolean {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     hour: "numeric",
@@ -69,10 +69,10 @@ export function isPastCutoffTime(now: Date, timezone: string, cutoffHour = 10, c
 }
 
 /**
- * Inspect whether a scheduled run was missed for today (e.g. server was offline at 08:15).
+ * Inspect whether a scheduled run was missed for today (e.g. server was offline at 08:00).
  * Only executes if:
  *  - Weekday
- *  - Past 08:15
+ *  - Past 08:00
  *  - BEFORE cutoff hour (default 10:00)
  *  - No existing scheduled run in database
  *  - ENABLE_CRON_SCHEDULER is true
@@ -83,7 +83,7 @@ export async function checkMissedRun(
 ): Promise<boolean> {
   const timezone = config.reminderTimezone;
   const isWeekday = isWeekdayInTimezone(now, timezone);
-  const isPastScheduledTime = isAfterMorningTime(now, timezone, 8, 15);
+  const isPastScheduledTime = isAfterMorningTime(now, timezone, 8, 0);
   const todayDate = formatTzDate(now, timezone);
   const scheduledKey = formatScheduledRunKey(todayDate);
 
@@ -113,7 +113,7 @@ export async function checkMissedRun(
   }
 
   logger.warn({
-    msg: "missed reminder run detected within recovery window (08:15 - 10:00)",
+    msg: "missed reminder run detected within recovery window (08:00 - 10:00)",
     date: todayDate,
     scheduled_key: scheduledKey,
     scheduler_enabled: config.enableCronScheduler,

@@ -149,10 +149,10 @@ describe("loadConfig()", () => {
       expect(config.baseApiTimeoutMs).toBe(15_000);
     });
 
-    it("defaults reminderCron to 15 8 * * 1-5", () => {
+    it("defaults reminderCron to 0 8 * * 1-5", () => {
       setEnv(VALID_ENV);
       const config = loadConfig();
-      expect(config.reminderCron).toBe("15 8 * * 1-5");
+      expect(config.reminderCron).toBe("0 8 * * 1-5");
     });
 
     it("defaults enableCronScheduler to false (M1B requirement)", () => {

@@ -244,7 +244,7 @@ BaseApiClient
 ### 3.5 Data Collection Flow (M1)
 
 ```
-Scheduler triggers (08:15 weekdays)
+Scheduler triggers (08:00 weekdays)
 │
 ├─ 1. User Sync
 │     Account API → upsert local users table
@@ -340,7 +340,7 @@ User opens Telegram bot (MUST be private chat)
    ├─ If correct:
    │   ├─ Insert/update users_telegram: { base_user_id, telegram_user_id, telegram_chat_id }
    │   ├─ Mark OTP as consumed
-   │   └─ Bot: "✅ Liên kết thành công! Bạn sẽ nhận reminder mỗi sáng 08:15."
+   │   └─ Bot: "✅ Liên kết thành công! Bạn sẽ nhận reminder mỗi sáng 08:00."
    └
 ```
 
@@ -844,9 +844,9 @@ Relink request detected
 
 ### 11.1 Problem
 
-The 08:15 reminder should run once per business day. Possible failure modes:
-- **Double run**: Server restarts at 08:15, cron fires twice.
-- **Missed run**: Server was down at 08:15.
+The 08:00 reminder should run once per business day. Possible failure modes:
+- **Double run**: Server restarts at 08:00, cron fires twice.
+- **Missed run**: Server was down at 08:00.
 - **Partial run**: Server crashes mid-collection or mid-delivery.
 
 ### 11.2 Scheduler Idempotency (Run-Level)
@@ -922,7 +922,7 @@ On startup:
 ```
 On startup (every time):
   Check if today is a weekday
-  Check if current time > 08:15 Asia/Ho_Chi_Minh
+  Check if current time > 08:00 Asia/Ho_Chi_Minh
   Check if reminder_runs has no entry for today
 
   if (all true):
@@ -931,7 +931,7 @@ On startup (every time):
 ```
 
 > [!TIP]
-> For ~30 users, a "late" reminder (e.g., sent at 09:00 instead of 08:15 due to server restart) is acceptable and far better than a missed reminder. The missed-run-on-startup check handles this gracefully.
+> For ~30 users, a "late" reminder (e.g., sent at 09:00 instead of 08:00 due to server restart) is acceptable and far better than a missed reminder. The missed-run-on-startup check handles this gracefully.
 
 ---
 
@@ -1017,7 +1017,7 @@ Retention: Keep indefinitely for this scale (~30 users, low volume).
 |---|---|---|---|---|
 | **RC1** | Two OTP verification requests arrive simultaneously for the same user | Low (user double-clicks) | Double link creation | Use `SELECT ... FOR UPDATE` on `otp_attempts` row during verification. Single transaction for verify + link. |
 | **RC2** | User sends OTP while a new OTP is being generated (resend) | Low | Old OTP validated against new hash | Invalidate old OTP *before* inserting new one, in same transaction. Verify checks `consumed_at IS NULL AND invalidated_at IS NULL`. |
-| **RC3** | Scheduler fires twice at 08:15 (e.g., timezone edge case, rapid restart) | Medium | Duplicate scheduler runs | `reminder_runs.run_key` unique constraint + INSERT ... ON CONFLICT DO NOTHING. Second run gets no row back and aborts. (Note: this prevents duplicate runs, not duplicate Telegram messages — see §11.4.) |
+| **RC3** | Scheduler fires twice at 08:00 (e.g., timezone edge case, rapid restart) | Medium | Duplicate scheduler runs | `reminder_runs.run_key` unique constraint + INSERT ... ON CONFLICT DO NOTHING. Second run gets no row back and aborts. (Note: this prevents duplicate runs, not duplicate Telegram messages — see §11.4.) |
 | **RC4** | User unlinks while a reminder delivery is in progress | Very Low | Delivery sent to unlinked user | Acceptable. Message was already composed. Next day, user won't receive. No data leak (it's their own data). |
 | **RC5** | Two users try to link same Base account simultaneously | Very Low | Duplicate link entries | Unique partial index `idx_users_telegram_base_active` prevents this at DB level. Second INSERT fails. |
 | **RC6** | User sync runs while onboarding verification is in progress | Very Low | User deactivated between username check and OTP verify | Re-verify `is_active` status at OTP verification time, not just at username entry. |
@@ -1070,7 +1070,7 @@ Retention: Keep indefinitely for this scale (~30 users, low volume).
 
 | Failure | Detection | Recovery | User Impact |
 |---|---|---|---|
-| **PostgreSQL down** | Health check, connection error | Docker restart policy: `restart: unless-stopped`. App retries connection with backoff. | Onboarding fails temporarily. Reminder skipped if DB down at 08:15. |
+| **PostgreSQL down** | Health check, connection error | Docker restart policy: `restart: unless-stopped`. App retries connection with backoff. | Onboarding fails temporarily. Reminder skipped if DB down at 08:00. |
 | **Base API down (single module)** | HTTP error / timeout from collector | Retry 3× with exponential backoff + jitter. If all retries fail, mark that module as ERROR in the user's digest. Deliver partial digest with explicit warning. | User gets partial digest with warning message (e.g., "⚠️ Không thể tải dữ liệu Wework."). |
 | **Base API down (all modules)** | All collectors fail for a user | All modules marked ERROR. Digest status = "all_failed". No message sent. Delivery marked as `error`. | User doesn't receive reminder. Logged for operational review. |
 | **Base API token expired** | HTTP 401/403 | Log error at `fatal` level. Health check reports `token_expired`. Manual intervention required to rotate token. | All reminders fail for that module. System remains up, reports the issue. |
@@ -1107,9 +1107,9 @@ services:
 | Original Concern | Simplification | Rationale |
 |---|---|---|
 | Redis for rate limiting | PostgreSQL COUNT query | ~30 users. SQL `COUNT(*) WHERE created_at > NOW() - interval '15 min'` is fast enough. No Redis dependency. |
-| Message queue for delivery | Direct loop with error handling | ~30 messages at 08:15. No need for async queue. Sequential delivery with per-user error isolation is sufficient. |
+| Message queue for delivery | Direct loop with error handling | ~30 messages at 08:00. No need for async queue. Sequential delivery with per-user error isolation is sufficient. |
 | Webhook mode for Telegram | Long polling | Internal tool with low message volume. Long polling is simpler to deploy (no TLS cert, no public URL needed). |
-| Caching Base API responses | No cache | Data is fetched once at 08:15, used immediately, discarded. Caching adds stale-data risks for no benefit. |
+| Caching Base API responses | No cache | Data is fetched once at 08:00, used immediately, discarded. Caching adds stale-data risks for no benefit. |
 | User roles / RBAC | None | All ~30 users are equivalent. No admin panel. System-level operations are via env vars or direct DB. |
 | Separate API server | Single process | Bot + scheduler + health check in one Node.js process. HTTP server only for `/health`. No REST API needed. |
 | Database connection pooling tuning | Default pool (10 connections) | ~30 users, single process, no concurrent HTTP requests. Default `pg.Pool` is more than sufficient. |
@@ -1206,7 +1206,7 @@ This matrix reconciles the original design baseline against the current producti
 | **15** | MUST | Config validation at startup (fail fast) | **IMPLEMENTED** | `src/config/index.ts`. Validates required environment variables at boot with isolated subsystem loaders (`loadCoreConfig`, `loadTelegramConfig`, `loadSmtpConfig`). |
 | **16** | MUST | Secret redaction in logs | **IMPLEMENTED** | `src/logging/logger.ts`. Serializer-level redaction censors all token variables, passwords, OTPs, emails, and authorization headers across all log levels. |
 | **17** | MUST | Request module: fail closed on unknown workflow type | **IMPLEMENTED** | `src/collectors/request.ts`. Returns `false` for any workflow type other than `"sequential"` or `"parallel"`. |
-| **18** | MUST | Missed run detection on startup | **IMPLEMENTED** | `src/scheduler/cron.ts`. `checkMissedRun()` catches up weekday runs if server boots between 08:15 and 10:00 ICT recovery cutoff. |
+| **18** | MUST | Missed run detection on startup | **IMPLEMENTED** | `src/scheduler/cron.ts`. `checkMissedRun()` catches up weekday runs if server boots between 08:00 and 10:00 ICT recovery cutoff. |
 | **19** | MUST | PostgreSQL migrations for M2 tables | **EVOLVED** | `src/db/migrations/003_m2a_telegram_auth.sql`, `004_m2b_delivery_metadata.sql`. Created `telegram_links`, `otp_challenges`, `telegram_conversations`, `audit_log`, and `reminder_delivery_chunks`. |
 | **20** | MUST | Telegram bot setup (grammy, long polling, private-chat-only) | **IMPLEMENTED** | `src/telegram/bot.ts`. grammY bot with long polling, `privateChatOnlyMiddleware` enforcement, and native menu commands. |
 | **21** | MUST | Onboarding flow (username → OTP → link) | **IMPLEMENTED** | `src/telegram/handlers/text-dispatcher.ts`, `src/telegram/services/linking-service.ts`. Multi-step state machine orchestrating username validation, OTP dispatch, and linking. |
@@ -1315,7 +1315,7 @@ SMTP_PASS=<password>
 SMTP_FROM="Base Reminder <noreply@example.com>"
 
 # === Scheduler ===
-REMINDER_CRON="15 8 * * 1-5"         # 08:15 Mon-Fri
+REMINDER_CRON="0 8 * * 1-5"         # 08:00 Mon-Fri
 REMINDER_TIMEZONE=Asia/Ho_Chi_Minh
 
 # === OTP ===

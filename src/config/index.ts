@@ -137,7 +137,7 @@ export function loadCoreConfig(): CoreConfig {
   const nodeEnvRaw = optionalEnv("NODE_ENV", "production");
   const logLevel = optionalEnv("LOG_LEVEL", "info");
   const reminderTimezone = optionalEnv("REMINDER_TIMEZONE", "Asia/Ho_Chi_Minh");
-  const reminderCron = optionalEnv("REMINDER_CRON", "15 8 * * 1-5");
+  const reminderCron = optionalEnv("REMINDER_CRON", "0 8 * * 1-5");
   const enableCronScheduler = optionalEnv("ENABLE_CRON_SCHEDULER", "false").toLowerCase() === "true";
   const missedRunCutoffHour = optionalIntEnv("MISSED_RUN_CUTOFF_HOUR", 10, missing);
   const healthHost = optionalEnv("HEALTH_HOST", "127.0.0.1");

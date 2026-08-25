@@ -34,7 +34,7 @@ export function createStopHandler(linkingService: LinkingService) {
 
     await ctx.reply(
       "⏸ <b>Đã tạm dừng nhận nhắc nhở.</b>\n\n" +
-        "Bạn sẽ không nhận thông báo lúc 08:15 hàng ngày nữa.\n" +
+        "Bạn sẽ không nhận thông báo lúc 08:00 hàng ngày nữa.\n" +
         "Dùng /resume để kích hoạt lại bất kỳ lúc nào.",
       { parse_mode: "HTML" }
     );
@@ -58,7 +58,7 @@ export function createResumeHandler(linkingService: LinkingService) {
 
     if (activeLink.reminders_enabled) {
       await ctx.reply(
-        "✅ Nhắc nhở của bạn hiện đang hoạt động bình thường (08:15 các ngày trong tuần).\n\nDùng /stop nếu muốn tạm dừng.",
+        "✅ Nhắc nhở của bạn hiện đang hoạt động bình thường (08:00 các ngày trong tuần).\n\nDùng /stop nếu muốn tạm dừng.",
         { parse_mode: "HTML" }
       );
       return;
@@ -68,7 +68,7 @@ export function createResumeHandler(linkingService: LinkingService) {
 
     await ctx.reply(
       "▶️ <b>Đã bật lại nhận nhắc nhở!</b>\n\n" +
-        "Bạn sẽ nhận thông báo tổng hợp công việc mỗi sáng vào lúc 08:15.",
+        "Bạn sẽ nhận thông báo tổng hợp công việc mỗi sáng vào lúc 08:00.",
       { parse_mode: "HTML" }
     );
   };

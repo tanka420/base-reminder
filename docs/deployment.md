@@ -127,7 +127,7 @@ SMTP_FROM="Base Reminder <noreply@company.com>"
 
 # Scheduler (Start with FALSE during initial verification)
 ENABLE_CRON_SCHEDULER=false
-REMINDER_CRON="15 8 * * 1-5"
+REMINDER_CRON="0 8 * * 1-5"
 REMINDER_TIMEZONE=Asia/Ho_Chi_Minh
 MISSED_RUN_CUTOFF_HOUR=10
 

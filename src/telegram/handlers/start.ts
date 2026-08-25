@@ -44,7 +44,7 @@ export function createStartHandler(linkingService: LinkingService) {
 
     await ctx.reply(
       `👋 Chào mừng bạn đến với <b>Base Reminder</b>!\n\n` +
-        `Hệ thống sẽ gửi thông báo nhắc nhở công việc từ <b>Wework</b>, <b>Workflow</b> và <b>Request</b> mỗi sáng lúc 08:15.\n\n` +
+        `Hệ thống sẽ gửi thông báo nhắc nhở công việc từ <b>Wework</b>, <b>Workflow</b> và <b>Request</b> mỗi sáng lúc 08:00.\n\n` +
         `Vui lòng nhập <b>username Base.vn</b> của bạn để bắt đầu (ví dụ: <code>Digital01</code>):`,
       { parse_mode: "HTML" }
     );

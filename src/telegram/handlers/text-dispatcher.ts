@@ -266,7 +266,7 @@ export function createTextMessageDispatcher(params: {
           `✅ <b>Liên kết tài khoản thành công!</b>\n\n` +
             `• <b>Họ tên:</b> ${escapeHtml(pendingDisplayName)}\n` +
             `• <b>Username:</b> <code>${escapeHtml(pendingUsername)}</code>\n\n` +
-            `Từ bây giờ bạn sẽ nhận được thông báo nhắc nhở công việc mỗi sáng vào lúc 08:15.\n` +
+            `Từ bây giờ bạn sẽ nhận được thông báo nhắc nhở công việc mỗi sáng vào lúc 08:00.\n` +
             `Dùng /status để xem thông tin hoặc /help để xem hướng dẫn.`,
           { parse_mode: "HTML" }
         );

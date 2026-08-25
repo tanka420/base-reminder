@@ -243,7 +243,7 @@ sudo journalctl --vacuum-time=3d
 
 ### Host Clock & NTP Verification
 
-Accurate time synchronization is required for 08:15 ICT cron triggers and OTP token expiry calculations:
+Accurate time synchronization is required for 08:00 ICT cron triggers and OTP token expiry calculations:
 
 ```bash
 # Verify system clock and NTP synchronization

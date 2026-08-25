@@ -3,7 +3,7 @@
 **Repository**: `base-reminder`  
 **Baseline Commit**: `0283aaf59f45ffb4bbfcc457a69ad565c66d319d`  
 **Target Environment**: AWS EC2 (`t4g.small` / `t3.small`, Ubuntu 24.04 LTS, 2 GB RAM, 2 GB swap, 20 GB gp3 EBS)  
-**Workload**: ~26 internal workspace users, 1 morning batch reminder per workday (08:15 Asia/Ho_Chi_Minh)  
+**Workload**: ~26 internal workspace users, 1 morning batch reminder per workday (08:00 Asia/Ho_Chi_Minh)  
 **Status**: Pre-Production Audit Complete — Hardened for AWS Rollout  
 
 ---
@@ -149,7 +149,7 @@ This comprehensive pre-production security and operational risk review verifies 
 - **Date Grouping**: Handled via `formatTzDate(now, "Asia/Ho_Chi_Minh")` returning `YYYY-MM-DD` in ICT time, independent of host machine UTC configuration.
 - **Missed-Run Recovery Window**:
   - Evaluated on startup if `ENABLE_CRON_SCHEDULER=true`.
-  - If current time is between 08:15 ICT and 10:00 ICT (cutoff) on a weekday and no scheduled run exists in DB, triggers catch-up delivery.
+  - If current time is between 08:00 ICT and 10:00 ICT (cutoff) on a weekday and no scheduled run exists in DB, triggers catch-up delivery.
   - If current time is past 10:00 ICT, skips catch-up delivery to avoid disturbing employees late in the morning.
 - **Startup Observability**: `src/index.ts` logs scheduler status (`cron_scheduler_enabled`) and business timezone (`business_timezone: "Asia/Ho_Chi_Minh"`) without exposing tokens.
 
@@ -157,7 +157,7 @@ This comprehensive pre-production security and operational risk review verifies 
 
 ## 12. Clock Synchronization & NTP
 
-- **Host Time Accuracy**: Critical for 08:15 ICT morning reminder triggers and 10-minute OTP expiration windows.
+- **Host Time Accuracy**: Critical for 08:00 ICT morning reminder triggers and 10-minute OTP expiration windows.
 - **AWS Host NTP**: Verified via `timedatectl status` ensuring `System clock synchronized: yes` and `NTP service: active` synced to Amazon Time Sync Service (`169.254.169.123`).
 
 ---

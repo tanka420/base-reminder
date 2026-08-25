@@ -40,21 +40,24 @@ describe("Scheduler & Timezone Utilities", () => {
     });
   });
 
-  describe("isAfterMorningTime (08:15 VN time)", () => {
-    it("returns false before 08:15 (e.g. 08:14)", () => {
-      // 08:14 VN = 01:14 UTC
-      const beforeTime = new Date("2026-08-20T01:14:00.000Z");
-      expect(isAfterMorningTime(beforeTime, TZ, 8, 15)).toBe(false);
+  describe("isAfterMorningTime (08:00 VN time)", () => {
+    it("returns false before 08:00 (e.g. 07:59)", () => {
+      // 07:59 VN = 00:59 UTC
+      const beforeTime = new Date("2026-08-20T00:59:00.000Z");
+      expect(isAfterMorningTime(beforeTime, TZ, 8, 0)).toBe(false);
+      expect(isAfterMorningTime(beforeTime, TZ)).toBe(false);
     });
 
-    it("returns true at or after 08:15 (e.g. 08:15 and 09:00)", () => {
-      // 08:15 VN = 01:15 UTC
-      const exactTime = new Date("2026-08-20T01:15:00.000Z");
-      expect(isAfterMorningTime(exactTime, TZ, 8, 15)).toBe(true);
+    it("returns true at or after 08:00 (e.g. 08:00 and 09:00)", () => {
+      // 08:00 VN = 01:00 UTC
+      const exactTime = new Date("2026-08-20T01:00:00.000Z");
+      expect(isAfterMorningTime(exactTime, TZ, 8, 0)).toBe(true);
+      expect(isAfterMorningTime(exactTime, TZ)).toBe(true);
 
       // 09:00 VN = 02:00 UTC
       const afterTime = new Date("2026-08-20T02:00:00.000Z");
-      expect(isAfterMorningTime(afterTime, TZ, 8, 15)).toBe(true);
+      expect(isAfterMorningTime(afterTime, TZ, 8, 0)).toBe(true);
+      expect(isAfterMorningTime(afterTime, TZ)).toBe(true);
     });
   });
 

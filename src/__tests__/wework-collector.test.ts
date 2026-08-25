@@ -24,19 +24,19 @@ import type { BaseWeworkTask, WeworkApiClient } from "../base-api/wework.js";
 describe("Wework Collector & Task Classification", () => {
   const TZ = "Asia/Ho_Chi_Minh";
 
-  // Reference date: 2026-08-20 08:15:00 in Asia/Ho_Chi_Minh (UTC+7)
-  // UTC time: 2026-08-20 01:15:00 UTC -> 1787188500 seconds
-  const mockNow = new Date("2026-08-20T01:15:00.000Z");
+  // Reference date: 2026-08-20 08:00:00 in Asia/Ho_Chi_Minh (UTC+7)
+  // UTC time: 2026-08-20 01:00:00 UTC -> 1787187600 seconds
+  const mockNow = new Date("2026-08-20T01:00:00.000Z");
 
   it("formats dates correctly in Asia/Ho_Chi_Minh", () => {
     expect(formatTzDate(mockNow, TZ)).toBe("2026-08-20");
 
-    // Unix timestamp 1787188500 = 2026-08-20
-    expect(formatTzDate(1787188500, TZ)).toBe("2026-08-20");
+    // Unix timestamp 1787187600 = 2026-08-20
+    expect(formatTzDate(1787187600, TZ)).toBe("2026-08-20");
   });
 
   describe("deadline_has_time = 0 (date-only deadlines)", () => {
-    it("marks task due today as isDueToday=true and isOverdue=false during morning run (08:15)", () => {
+    it("marks task due today as isDueToday=true and isOverdue=false during morning run (08:00)", () => {
       // 2026-08-20 23:59:59 in Asia/Ho_Chi_Minh -> 2026-08-20 16:59:59 UTC = 1787245199
       const todayUnix = 1787245199;
 
@@ -126,7 +126,7 @@ describe("Wework Collector & Task Classification", () => {
       expect(result.isOverdue).toBe(false);
     });
 
-    it("marks time-specific task earlier today (07:00) as isDueToday=true AND isOverdue=true at 08:15", () => {
+    it("marks time-specific task earlier today (07:00) as isDueToday=true AND isOverdue=true at 08:00", () => {
       // 2026-08-20 07:00:00 VN (00:00:00 UTC) = 1787184000
       const earlierTodayUnix = 1787184000;
 

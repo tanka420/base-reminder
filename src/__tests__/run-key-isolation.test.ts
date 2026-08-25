@@ -64,7 +64,7 @@ describe("Run Key Namespacing & Idempotency Isolation (pg-mem)", () => {
     const testId2 = await createReminderRun(testKey2, today);
     expect(testId2).not.toBeNull();
 
-    // 4. Verify scheduled run key is STILL available and creates successfully at 08:15
+    // 4. Verify scheduled run key is STILL available and creates successfully at 08:00
     const scheduledKey = formatScheduledRunKey(today);
     const scheduledId = await createReminderRun(scheduledKey, today);
     expect(scheduledId).not.toBeNull();
