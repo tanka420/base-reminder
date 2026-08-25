@@ -82,6 +82,12 @@ async function main(): Promise<void> {
         telegramConfig,
         smtpConfig,
         baseAccountToken: config.baseAccountToken,
+        baseWeWorkToken: config.baseWeWorkToken,
+        baseWorkflowToken: config.baseWorkflowToken,
+        baseRequestToken: config.baseRequestToken,
+        reminderTimezone: config.reminderTimezone,
+        baseApiTimeoutMs: config.baseApiTimeoutMs,
+        baseApiConcurrency: config.baseApiConcurrency,
       });
 
       stopBot = botResult.stop;

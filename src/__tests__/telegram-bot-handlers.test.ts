@@ -115,6 +115,64 @@ describe("Telegram Bot Handlers & Middlewares", () => {
     });
   });
 
+  describe("/status handler", () => {
+    it("when not linked: prompts user to use /start", async () => {
+      const reply = vi.fn().mockResolvedValue(undefined);
+      const mockLinkingService = {
+        getActiveLink: vi.fn().mockResolvedValue(null),
+      } as unknown as LinkingService;
+
+      const handler = createStatusHandler(mockLinkingService);
+      const ctx: any = {
+        from: { id: 12345 },
+        reply,
+      };
+
+      await handler(ctx);
+
+      expect(reply).toHaveBeenCalledWith(
+        expect.stringContaining("Bạn chưa liên kết với tài khoản Base.vn nào"),
+        expect.objectContaining({ parse_mode: "HTML" })
+      );
+    });
+
+    it("when linked: renders Base username, Telegram link status, Reminder toggle, and schedule", async () => {
+      const reply = vi.fn().mockResolvedValue(undefined);
+      const mockLinkingService = {
+        getActiveLink: vi.fn().mockResolvedValue({
+          id: 1,
+          base_user_id: 101,
+          telegram_user_id: "12345",
+          telegram_chat_id: "12345",
+          reminders_enabled: true,
+          username: "Digital01",
+          display_name: "Mai Thanh Tân",
+          email: "tan@company.com",
+          linked_at: new Date("2026-08-20T10:00:00Z"),
+        }),
+      } as unknown as LinkingService;
+
+      const handler = createStatusHandler(mockLinkingService);
+      const ctx: any = {
+        from: { id: 12345 },
+        reply,
+      };
+
+      await handler(ctx);
+
+      expect(reply).toHaveBeenCalledWith(
+        expect.stringContaining("Thông tin tài khoản"),
+        expect.objectContaining({ parse_mode: "HTML" })
+      );
+      const replyText = String(reply.mock.calls[0]?.[0] ?? "");
+      expect(replyText).toContain("🧑 <b>Base:</b>\n@Digital01 (Mai Thanh Tân)");
+      expect(replyText).toContain("🔗 <b>Trạng thái:</b>\nĐã liên kết");
+      expect(replyText).toContain("🔔 <b>Nhắc việc:</b>\nĐang bật");
+      expect(replyText).toContain("⏰ <b>Lịch nhắc việc:</b>\nThứ 2 - Thứ 6 lúc 08:00");
+      expect(replyText).toContain("🌏 <b>Múi giờ:</b>\nAsia/Ho_Chi_Minh");
+    });
+  });
+
   describe("Text Message Dispatcher", () => {
     it("ignores messages starting with / (commands handled by command router)", async () => {
       const getConvSpy = vi.spyOn(convQueries, "getConversationState");
@@ -222,6 +280,65 @@ describe("Telegram Bot Handlers & Middlewares", () => {
         telegramChatId: 12345,
         baseUserId: 101,
         baseUsername: "Digital01",
+      });
+
+      expect(reply).toHaveBeenCalledWith(
+        expect.stringContaining("Liên kết tài khoản thành công"),
+        expect.objectContaining({ parse_mode: "HTML" })
+      );
+    });
+
+    it("in AWAIT_OTP state: triggers welcomeDigestService after linking and catches failure safely", async () => {
+      vi.spyOn(convQueries, "getConversationState").mockResolvedValue({
+        telegram_user_id: "12345",
+        state: "AWAIT_OTP",
+        context_data: {
+          pending_base_user_id: 101,
+          pending_username: "Digital01",
+          pending_display_name: "Mai Thanh Tân",
+        },
+        updated_at: new Date(),
+      });
+
+      const mockOtpService = {
+        verifyOtpInput: vi.fn().mockResolvedValue({
+          success: true,
+          challengeId: 88,
+          baseUserId: 101,
+        }),
+      } as unknown as OtpService;
+
+      const mockLinkingService = {
+        finalizeLink: vi.fn().mockResolvedValue({ success: true, isRelink: false }),
+      } as unknown as LinkingService;
+
+      const mockWelcomeDigestService = {
+        sendWelcomeDigest: vi.fn().mockRejectedValue(new Error("Telegram send error")),
+      } as any;
+
+      const dispatcher = createTextMessageDispatcher({
+        otpService: mockOtpService,
+        linkingService: mockLinkingService,
+        welcomeDigestService: mockWelcomeDigestService,
+      });
+
+      const reply = vi.fn().mockResolvedValue(undefined);
+      const ctx: any = {
+        from: { id: 12345 },
+        chat: { id: 12345 },
+        message: { text: "123456" },
+        reply,
+      };
+
+      // Must not throw despite welcomeDigestService failure
+      await expect(dispatcher(ctx)).resolves.not.toThrow();
+
+      expect(mockWelcomeDigestService.sendWelcomeDigest).toHaveBeenCalledWith({
+        telegramUserId: 12345,
+        telegramChatId: 12345,
+        baseUserId: 101,
+        baseUsername: "Digital01",
+        baseDisplayName: "Mai Thanh Tân",
       });
 
       expect(reply).toHaveBeenCalledWith(

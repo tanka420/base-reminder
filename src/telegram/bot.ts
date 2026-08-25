@@ -13,8 +13,12 @@
 import { Bot } from "grammy";
 import type { TelegramConfig, SmtpConfig } from "../config/index.js";
 import { AccountApiClient } from "../base-api/account.js";
+import { WeworkApiClient } from "../base-api/wework.js";
+import { WorkflowApiClient } from "../base-api/workflow.js";
+import { RequestApiClient } from "../base-api/request.js";
 import { OtpService } from "./services/otp-service.js";
 import { LinkingService } from "./services/linking-service.js";
+import { WelcomeDigestService } from "./services/welcome-digest-service.js";
 import { privateChatOnlyMiddleware } from "./middleware/private-chat.js";
 import { createStartHandler } from "./handlers/start.js";
 import { createStatusHandler } from "./handlers/status.js";
@@ -27,6 +31,7 @@ import { logger } from "../logging/logger.js";
 export interface BotServices {
   otpService: OtpService;
   linkingService: LinkingService;
+  welcomeDigestService?: WelcomeDigestService;
   accountApiClient?: AccountApiClient;
 }
 
@@ -64,25 +69,61 @@ export function createTelegramBot(
       accountApiClient: services.accountApiClient,
       otpService: services.otpService,
       linkingService: services.linkingService,
+      welcomeDigestService: services.welcomeDigestService,
     })
   );
 
   return bot;
 }
 
-/**
- * Helper to initialize and start the bot with default services.
- */
-export async function initTelegramBot(params: {
+export interface InitTelegramBotParams {
   telegramConfig: TelegramConfig;
   smtpConfig: SmtpConfig;
   baseAccountToken?: string;
-}): Promise<{ bot: Bot; stop: () => Promise<void> }> {
-  const { telegramConfig, smtpConfig, baseAccountToken } = params;
+  baseWeWorkToken?: string;
+  baseWorkflowToken?: string;
+  baseRequestToken?: string;
+  reminderTimezone?: string;
+  baseApiTimeoutMs?: number;
+  baseApiConcurrency?: number;
+}
+
+/**
+ * Helper to initialize and start the bot with default services.
+ */
+export async function initTelegramBot(
+  params: InitTelegramBotParams
+): Promise<{ bot: Bot; stop: () => Promise<void> }> {
+  const {
+    telegramConfig,
+    smtpConfig,
+    baseAccountToken,
+    baseWeWorkToken,
+    baseWorkflowToken,
+    baseRequestToken,
+    reminderTimezone,
+    baseApiTimeoutMs,
+    baseApiConcurrency,
+  } = params;
 
   let accountApiClient: AccountApiClient | undefined;
   if (baseAccountToken) {
-    accountApiClient = new AccountApiClient(baseAccountToken);
+    accountApiClient = new AccountApiClient(baseAccountToken, baseApiTimeoutMs, baseApiConcurrency);
+  }
+
+  let weworkClient: WeworkApiClient | undefined;
+  if (baseWeWorkToken) {
+    weworkClient = new WeworkApiClient(baseWeWorkToken, baseApiTimeoutMs, baseApiConcurrency);
+  }
+
+  let workflowClient: WorkflowApiClient | undefined;
+  if (baseWorkflowToken) {
+    workflowClient = new WorkflowApiClient(baseWorkflowToken, baseApiTimeoutMs, baseApiConcurrency);
+  }
+
+  let requestClient: RequestApiClient | undefined;
+  if (baseRequestToken) {
+    requestClient = new RequestApiClient(baseRequestToken, baseApiTimeoutMs, baseApiConcurrency);
   }
 
   const otpService = new OtpService(smtpConfig);
@@ -91,13 +132,28 @@ export async function initTelegramBot(params: {
 
   const linkingService = new LinkingService(async (chatId, message) => {
     if (bot) {
-      await bot.api.sendMessage(chatId, message, { parse_mode: "HTML" });
+      const targetChatId = typeof chatId === "bigint" ? String(chatId) : chatId;
+      await bot.api.sendMessage(targetChatId, message, { parse_mode: "HTML" });
     }
+  });
+
+  const welcomeDigestService = new WelcomeDigestService({
+    weworkClient,
+    workflowClient,
+    requestClient,
+    telegramSender: async (chatId, message) => {
+      if (bot) {
+        const targetChatId = typeof chatId === "bigint" ? String(chatId) : chatId;
+        await bot.api.sendMessage(targetChatId, message, { parse_mode: "HTML" });
+      }
+    },
+    timezone: reminderTimezone,
   });
 
   bot = createTelegramBot(telegramConfig, {
     otpService,
     linkingService,
+    welcomeDigestService,
     accountApiClient,
   });
 

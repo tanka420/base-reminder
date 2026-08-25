@@ -359,3 +359,120 @@ export function formatTelegramDigest(digest: UserDigest): string[] {
 
   return chunks;
 }
+
+export interface FormatWelcomeDigestOptions {
+  timezone?: string;
+}
+
+/**
+ * Format a UserDigest as a one-time onboarding welcome preview message.
+ *
+ * Distinct from standard daily digest:
+ *  - Includes welcome introduction explaining system behavior.
+ *  - Always renders even when user has zero tasks ("Không có việc cần xử lý.").
+ *  - Appends reminder schedule and menu guidance footer.
+ */
+export function formatWelcomeDigest(
+  digest: UserDigest,
+  options: FormatWelcomeDigestOptions = {}
+): string[] {
+  const timezone = options.timezone ?? "Asia/Ho_Chi_Minh";
+  const dateStr = formatHeaderDate(digest.runDate, timezone);
+
+  const welcomeIntro =
+    `👋 <b>CHÀO MỪNG BẠN ĐẾN VỚI BASE REMINDER</b>\n\n` +
+    `Base Reminder sẽ tự động tổng hợp các công việc cần xử lý\n` +
+    `và gửi nhắc việc cho bạn mỗi ngày.\n\n` +
+    `Dưới đây là ví dụ cách hệ thống hoạt động:\n\n` +
+    `☀️ <b>CÔNG VIỆC HÔM NAY ${dateStr}</b>\n`;
+
+  const welcomeFooter =
+    `\n\n---\n\n` +
+    `⏰ <b>Lịch nhắc việc:</b>\n` +
+    `Thứ 2 - Thứ 6 lúc 08:00\n\n` +
+    `🌏 <b>Múi giờ:</b>\n` +
+    `Asia/Ho_Chi_Minh\n\n` +
+    `Bạn có thể xem các chức năng hỗ trợ tại Menu của bot.`;
+
+  const failedModules = getFailedModuleNames(digest);
+
+  // Build categories for OK modules
+  const categories: FormattedCategory[] = [];
+
+  if (digest.wework.status === "ok") {
+    categories.push(buildWeworkCategory(digest.wework.items));
+  }
+  if (digest.workflow.status === "ok") {
+    categories.push(buildWorkflowCategory(digest.workflow.items));
+  }
+  if (digest.request.status === "ok") {
+    categories.push(buildRequestCategory(digest.request.items));
+  }
+
+  // Partial warning footer if any module failed
+  let partialWarning = "";
+  if (digest.isPartial && failedModules.length > 0) {
+    const failedNames = failedModules.join(", ");
+    partialWarning = `\n\n⚠️ <b>Dữ liệu có thể chưa đầy đủ</b>\nKhông thể tải dữ liệu: <b>${escapeHtml(failedNames)}</b>.`;
+  }
+
+  const chunks: string[] = [];
+  let currentChunk = welcomeIntro;
+  const continuationHeaderPrefix = `☀️ <b>CÔNG VIỆC HÔM NAY ${dateStr}</b> <i>(tiếp theo)</i>\n`;
+
+  for (const category of categories) {
+    const categoryHeader = `\n${category.title}\n`;
+    if (currentChunk === welcomeIntro) {
+      currentChunk += categoryHeader;
+    } else {
+      if ((currentChunk + "\n" + categoryHeader).length > MAX_CHUNK_LENGTH) {
+        chunks.push(currentChunk.trim());
+        currentChunk = `${continuationHeaderPrefix}\n${category.title} <i>(tiếp theo)</i>\n`;
+      } else {
+        currentChunk += `\n${categoryHeader}`;
+      }
+    }
+
+    for (const block of category.blocks) {
+      if (block.header) {
+        if ((currentChunk + "\n" + block.header + "\n").length > MAX_CHUNK_LENGTH) {
+          chunks.push(currentChunk.trim());
+          currentChunk = `${continuationHeaderPrefix}\n${category.title} <i>(tiếp theo)</i>\n\n${block.header}\n`;
+        } else {
+          currentChunk += `\n${block.header}\n`;
+        }
+      }
+
+      for (let i = 0; i < block.items.length; i++) {
+        const item = block.items[i]!;
+        const itemStr = `${item}\n`;
+
+        if ((currentChunk + itemStr).length > MAX_CHUNK_LENGTH) {
+          chunks.push(currentChunk.trim());
+          const contBlockHeader = block.header
+            ? `${continuationHeaderPrefix}\n${category.title} <i>(tiếp theo)</i>\n\n${block.header} <i>(tiếp theo)</i>\n`
+            : `${continuationHeaderPrefix}\n${category.title} <i>(tiếp theo)</i>\n`;
+          currentChunk = contBlockHeader + itemStr;
+        } else {
+          currentChunk += itemStr;
+        }
+      }
+    }
+  }
+
+  if (partialWarning) {
+    currentChunk += partialWarning;
+  }
+
+  // Append footer
+  if ((currentChunk + welcomeFooter).length <= MAX_CHUNK_LENGTH) {
+    currentChunk += welcomeFooter;
+    chunks.push(currentChunk.trim());
+  } else {
+    chunks.push(currentChunk.trim());
+    chunks.push(welcomeFooter.trim());
+  }
+
+  return chunks;
+}
+

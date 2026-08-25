@@ -21,6 +21,7 @@
 import { describe, it, expect } from "vitest";
 import {
   formatTelegramDigest,
+  formatWelcomeDigest,
   truncateText,
   formatHeaderDate,
   MAX_CHUNK_LENGTH,
@@ -382,5 +383,70 @@ describe("Telegram Digest Formatter", () => {
       expect(openTags).toBe(closeTags);
       expect(chunk).toContain('href="https://wework.base.vn/tasks?task=');
     }
+  });
+
+  describe("formatWelcomeDigest (Onboarding Preview)", () => {
+    it("renders welcome header, categories, and schedule footer for user with tasks", () => {
+      const task: ActionableTask = {
+        id: 101,
+        name: "Hoàn thiện kế hoạch quý 3",
+        isOverdue: false,
+        isDueToday: true,
+        url: "https://wework.base.vn/tasks?task=101",
+      };
+
+      const digest = createBaseDigest({
+        status: "ready",
+        runDate: "2026-08-25",
+        wework: { status: "ok", items: [task] },
+        workflow: { status: "ok", items: [] },
+        request: { status: "ok", items: [] },
+        counts: { wework: 1, workflow: 0, request: 0, total: 1 },
+      });
+
+      const chunks = formatWelcomeDigest(digest);
+      expect(chunks.length).toBe(1);
+      const msg = chunks[0]!;
+
+      // Welcome header
+      expect(msg).toContain("👋 <b>CHÀO MỪNG BẠN ĐẾN VỚI BASE REMINDER</b>");
+      expect(msg).toContain("Dưới đây là ví dụ cách hệ thống hoạt động:");
+      expect(msg).toContain("☀️ <b>CÔNG VIỆC HÔM NAY 25/08/2026</b>");
+
+      // Wework item
+      expect(msg).toContain("📋 <b>Wework</b>");
+      expect(msg).toContain("🟡 <b>Hôm nay · 1</b>");
+      expect(msg).toContain("1. Hoàn thiện kế hoạch quý 3 · <a href=\"https://wework.base.vn/tasks?task=101\">Link</a>");
+
+      // Zero-state for empty modules
+      expect(msg).toContain("⚙️ <b>Workflow</b>\nKhông có việc cần xử lý.");
+      expect(msg).toContain("✅ <b>Request</b>\nKhông có việc cần xử lý.");
+
+      // Schedule footer
+      expect(msg).toContain("⏰ <b>Lịch nhắc việc:</b>\nThứ 2 - Thứ 6 lúc 08:00");
+      expect(msg).toContain("🌏 <b>Múi giờ:</b>\nAsia/Ho_Chi_Minh");
+      expect(msg).toContain("Bạn có thể xem các chức năng hỗ trợ tại Menu của bot.");
+    });
+
+    it("renders complete onboarding preview when user has zero tasks across all modules", () => {
+      const digest = createBaseDigest({
+        status: "empty",
+        runDate: "2026-08-25",
+        wework: { status: "ok", items: [] },
+        workflow: { status: "ok", items: [] },
+        request: { status: "ok", items: [] },
+        counts: { wework: 0, workflow: 0, request: 0, total: 0 },
+      });
+
+      const chunks = formatWelcomeDigest(digest);
+      expect(chunks.length).toBe(1);
+      const msg = chunks[0]!;
+
+      expect(msg).toContain("👋 <b>CHÀO MỪNG BẠN ĐẾN VỚI BASE REMINDER</b>");
+      expect(msg).toContain("📋 <b>Wework</b>\nKhông có việc cần xử lý.");
+      expect(msg).toContain("⚙️ <b>Workflow</b>\nKhông có việc cần xử lý.");
+      expect(msg).toContain("✅ <b>Request</b>\nKhông có việc cần xử lý.");
+      expect(msg).toContain("⏰ <b>Lịch nhắc việc:</b>\nThứ 2 - Thứ 6 lúc 08:00");
+    });
   });
 });

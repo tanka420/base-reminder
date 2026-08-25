@@ -14,6 +14,7 @@ import type { Context } from "grammy";
 import type { AccountApiClient } from "../../base-api/account.js";
 import type { OtpService } from "../services/otp-service.js";
 import type { LinkingService } from "../services/linking-service.js";
+import type { WelcomeDigestService } from "../services/welcome-digest-service.js";
 import { getConversationState, setConversationState } from "../../db/queries/conversations.js";
 import { getBaseUserByUsername } from "../../db/queries/users.js";
 import { query } from "../../db/connection.js";
@@ -60,8 +61,9 @@ export function createTextMessageDispatcher(params: {
   accountApiClient?: AccountApiClient;
   otpService: OtpService;
   linkingService: LinkingService;
+  welcomeDigestService?: WelcomeDigestService;
 }) {
-  const { accountApiClient, otpService, linkingService } = params;
+  const { accountApiClient, otpService, linkingService, welcomeDigestService } = params;
 
   return async (ctx: Context): Promise<void> => {
     const text = ctx.message?.text?.trim();
@@ -270,6 +272,27 @@ export function createTextMessageDispatcher(params: {
             `Dùng /status để xem thông tin hoặc /help để xem hướng dẫn.`,
           { parse_mode: "HTML" }
         );
+
+        // Attempt onboarding welcome digest preview (best-effort, failure never breaks linking)
+        if (welcomeDigestService) {
+          try {
+            await welcomeDigestService.sendWelcomeDigest({
+              telegramUserId: tgUserId,
+              telegramChatId: chatId,
+              baseUserId: pendingBaseUserId,
+              baseUsername: pendingUsername,
+              baseDisplayName: pendingDisplayName,
+            });
+          } catch (welcomeErr) {
+            logger.warn({
+              msg: "welcome digest preview failed after linking",
+              error: welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
+              telegram_user_id: String(tgUserId),
+              base_user_id: pendingBaseUserId,
+            });
+          }
+        }
+
         return;
       }
 
