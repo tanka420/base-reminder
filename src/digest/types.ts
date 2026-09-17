@@ -21,6 +21,9 @@ export interface ActionableTask {
   isDueToday: boolean;
   url: string;
   projectId?: number;
+  startDate?: number; // Unix seconds
+  isStartingToday?: boolean;
+  isInProgress?: boolean;
 }
 
 export interface ActionableJob {

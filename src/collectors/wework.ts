@@ -37,36 +37,85 @@ export function formatTzDate(dateOrSeconds: Date | number, timezone: string): st
   }).format(date);
 }
 
+export interface WeworkTaskClassification {
+  actionable: boolean;
+  isDueToday: boolean;
+  isOverdue: boolean;
+  isStartingToday: boolean;
+  isInProgress: boolean;
+  deadlineSeconds?: number;
+  startDateSeconds?: number;
+}
+
 /**
- * Classify a task for reminder inclusion based on status, review state, and deadline.
+ * Classify a task for reminder inclusion based on status, review state, start date, and deadline.
+ *
+ * Filtering rules:
+ *  - status === "0" (incomplete only)
+ *  - AND review !== "1" and review !== 1 (exclude tasks currently under review)
+ *  - AND (
+ *      isOverdue (overdue === 1 OR deadline < today)
+ *      OR isDueToday (deadline === today)
+ *      OR isStartingToday (start_time === today)
+ *      OR isInProgress (start_time < today OR started === 1 OR complete > 0)
+ *    )
  */
 export function classifyWeworkTask(
   task: BaseWeworkTask,
   timezone: string,
   now: Date = new Date()
-): { actionable: boolean; isDueToday: boolean; isOverdue: boolean; deadlineSeconds?: number } {
+): WeworkTaskClassification {
   // 1. Only incomplete tasks (status === "0") can be actionable
   if (task.status !== "0") {
-    return { actionable: false, isDueToday: false, isOverdue: false };
+    return {
+      actionable: false,
+      isDueToday: false,
+      isOverdue: false,
+      isStartingToday: false,
+      isInProgress: false,
+    };
   }
 
   // 2. Exclude tasks currently under review (review === "1" or review === 1)
   const isUnderReview = task.review === "1" || task.review === 1;
   if (isUnderReview) {
-    return { actionable: false, isDueToday: false, isOverdue: false };
+    return {
+      actionable: false,
+      isDueToday: false,
+      isOverdue: false,
+      isStartingToday: false,
+      isInProgress: false,
+    };
   }
 
-  const rawDeadline = task.deadline !== undefined && task.deadline !== null ? Number(task.deadline) : 0;
+  // 3. Parse deadline
+  const rawDeadline = task.deadline !== undefined && task.deadline !== null && task.deadline !== "0" && task.deadline !== 0
+    ? Number(task.deadline)
+    : 0;
   const deadlineSeconds = Number.isFinite(rawDeadline) && rawDeadline > 0 ? rawDeadline : undefined;
   const hasTime = Number(task.deadline_has_time) === 1;
   const apiOverdue = task.overdue === 1 || task.overdue === "1";
+
+  // 4. Parse start date
+  const rawStart = task.start_time !== undefined && task.start_time !== null && task.start_time !== "0" && task.start_time !== 0
+    ? Number(task.start_time)
+    : (task.stime !== undefined && task.stime !== null && task.stime !== "0" && task.stime !== 0 ? Number(task.stime) : 0);
+  const startDateSeconds = Number.isFinite(rawStart) && rawStart > 0 ? rawStart : undefined;
+
+  // 5. Parse started flag & progress
+  const isStarted = task.started === 1 || task.started === "1";
+  const progress = parseFloat(String(task.complete || "0"));
+  const hasProgress = Number.isFinite(progress) && progress > 0;
 
   const todayStr = formatTzDate(now, timezone);
   const nowSeconds = Math.floor(now.getTime() / 1000);
 
   let isDueToday = false;
   let isOverdue = false;
+  let isStartingToday = false;
+  let isInProgress = false;
 
+  // Evaluate deadline
   if (deadlineSeconds !== undefined) {
     const deadlineDateStr = formatTzDate(deadlineSeconds, timezone);
 
@@ -88,13 +137,38 @@ export function classifyWeworkTask(
     isOverdue = true;
   }
 
-  const actionable = isDueToday || isOverdue;
-  return { actionable, isDueToday, isOverdue, deadlineSeconds };
+  // Evaluate start time
+  if (startDateSeconds !== undefined) {
+    const startDateStr = formatTzDate(startDateSeconds, timezone);
+    if (startDateStr === todayStr) {
+      isStartingToday = true;
+      isInProgress = true;
+    } else if (startDateStr < todayStr) {
+      // Past start date but incomplete -> actively in progress
+      isInProgress = true;
+    }
+  }
+
+  // Evaluate started flag & progress
+  if (isStarted || hasProgress) {
+    isInProgress = true;
+  }
+
+  const actionable = isOverdue || isDueToday || isInProgress;
+  return {
+    actionable,
+    isDueToday,
+    isOverdue,
+    isStartingToday,
+    isInProgress,
+    deadlineSeconds,
+    startDateSeconds,
+  };
 }
 
 /**
  * Collect actionable tasks for a specific user.
- * Sorted: Overdue (oldest first) -> Due Today.
+ * Sorted: Overdue (oldest first) -> Due Today -> In Progress.
  */
 export async function collectWeworkTasks(
   client: WeworkApiClient,
@@ -116,20 +190,41 @@ export async function collectWeworkTasks(
       id: task.id,
       name: task.name || (task.display_name ?? `Task #${task.id}`),
       deadline: classification.deadlineSeconds,
+      startDate: classification.startDateSeconds,
       isOverdue: classification.isOverdue,
       isDueToday: classification.isDueToday,
+      isStartingToday: classification.isStartingToday,
+      isInProgress: classification.isInProgress,
       url,
       projectId: task.project_id,
     });
   }
 
-  // Sort items: overdue first (oldest deadline first), then due today
+  // Sort items:
+  // 1. Overdue first (oldest deadline first)
+  // 2. Due today second (earliest deadline first)
+  // 3. In Progress third (earliest deadline first, then start date)
   actionableItems.sort((a, b) => {
+    // Overdue items first
     if (a.isOverdue && !b.isOverdue) return -1;
     if (!a.isOverdue && b.isOverdue) return 1;
+
+    // Due today items second
+    if (a.isDueToday && !b.isDueToday) return -1;
+    if (!a.isDueToday && b.isDueToday) return 1;
+
+    // Tie-breaker
     const aDead = a.deadline ?? 0;
     const bDead = b.deadline ?? 0;
-    return aDead - bDead;
+    if (aDead !== bDead) {
+      if (aDead === 0) return 1;
+      if (bDead === 0) return -1;
+      return aDead - bDead;
+    }
+
+    const aStart = a.startDate ?? 0;
+    const bStart = b.startDate ?? 0;
+    return aStart - bStart;
   });
 
   return actionableItems;

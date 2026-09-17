@@ -107,7 +107,7 @@ function buildWeworkCategory(items: ActionableTask[]): FormattedCategory {
 
   const overdue = items.filter((t) => t.isOverdue);
   const dueToday = items.filter((t) => !t.isOverdue && t.isDueToday);
-  const others = items.filter((t) => !t.isOverdue && !t.isDueToday);
+  const inProgress = items.filter((t) => !t.isOverdue && !t.isDueToday);
 
   const blocks: FormattedBlock[] = [];
 
@@ -124,7 +124,7 @@ function buildWeworkCategory(items: ActionableTask[]): FormattedCategory {
 
   if (dueToday.length > 0) {
     blocks.push({
-      header: `🟡 <b>Hôm nay · ${dueToday.length}</b>`,
+      header: `🟡 <b>Hạn chót hôm nay · ${dueToday.length}</b>`,
       items: dueToday.map((item, idx) => {
         const itemTitle = escapeHtml(truncateText(item.name));
         const safeUrl = escapeHtml(item.url);
@@ -133,10 +133,10 @@ function buildWeworkCategory(items: ActionableTask[]): FormattedCategory {
     });
   }
 
-  if (others.length > 0) {
+  if (inProgress.length > 0) {
     blocks.push({
-      header: `📋 <b>Việc khác · ${others.length}</b>`,
-      items: others.map((item, idx) => {
+      header: `🔵 <b>Đang thực hiện · ${inProgress.length}</b>`,
+      items: inProgress.map((item, idx) => {
         const itemTitle = escapeHtml(truncateText(item.name));
         const safeUrl = escapeHtml(item.url);
         return `${idx + 1}. ${itemTitle} · <a href="${safeUrl}">Link</a>`;

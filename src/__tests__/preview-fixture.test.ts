@@ -33,7 +33,7 @@ describe("Synthetic Preview Fixtures & Formatting", () => {
     expect(message).toContain('2. Thiết lập Website / Landing Page · <a href="https://wework.base.vn/tasks?task=1002">Link</a>');
     expect(message).toContain('3. Cập nhật giao diện Shopee / TikTok Shop · <a href="https://wework.base.vn/tasks?task=1003">Link</a>');
 
-    expect(message).toContain("🟡 <b>Hôm nay · 3</b>");
+    expect(message).toContain("🟡 <b>Hạn chót hôm nay · 3</b>");
     expect(message).toContain('1. Hoàn thiện nội dung website VP Racing · <a href="https://wework.base.vn/tasks?task=1004">Link</a>');
     expect(message).toContain('2. Chuẩn bị báo cáo Digital Marketing · <a href="https://wework.base.vn/tasks?task=1005">Link</a>');
     expect(message).toContain('3. Kiểm tra nội dung Landing Page · <a href="https://wework.base.vn/tasks?task=1006">Link</a>');

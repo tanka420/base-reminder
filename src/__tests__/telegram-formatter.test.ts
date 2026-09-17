@@ -138,7 +138,7 @@ describe("Telegram Digest Formatter", () => {
     const msg = chunks[0]!;
 
     expect(msg).toContain("📋 <b>Wework</b>");
-    expect(msg).toContain("🟡 <b>Hôm nay · 1</b>");
+    expect(msg).toContain("🟡 <b>Hạn chót hôm nay · 1</b>");
     expect(msg).toContain('1. Gửi kế hoạch Beta · <a href="https://wework.base.vn/tasks?task=5678">Link</a>');
 
     // Quá hạn · 0 is HIDDEN
@@ -146,7 +146,7 @@ describe("Telegram Digest Formatter", () => {
     expect(msg).not.toContain("🔴 <b>Quá hạn");
   });
 
-  it("renders both Quá hạn and Hôm nay when overdue>0, today>0 without module total counts", () => {
+  it("renders both Quá hạn and Hạn chót hôm nay when overdue>0, today>0 without module total counts", () => {
     const overdueTask: ActionableTask = {
       id: 1234,
       name: "Báo cáo tiến độ Alpha",
@@ -180,7 +180,7 @@ describe("Telegram Digest Formatter", () => {
     expect(msg).not.toContain("📋 <b>Wework · 2</b>");
     expect(msg).toContain("🔴 <b>Quá hạn · 1</b>");
     expect(msg).toContain('1. Báo cáo tiến độ Alpha · <a href="https://wework.base.vn/tasks?task=1234">Link</a>');
-    expect(msg).toContain("🟡 <b>Hôm nay · 1</b>");
+    expect(msg).toContain("🟡 <b>Hạn chót hôm nay · 1</b>");
     expect(msg).toContain('1. Gửi kế hoạch Beta · <a href="https://wework.base.vn/tasks?task=5678">Link</a>');
   });
 
@@ -249,7 +249,7 @@ describe("Telegram Digest Formatter", () => {
     // Wework: 3 overdue, 1 today
     expect(msg).toContain("📋 <b>Wework</b>");
     expect(msg).toContain("🔴 <b>Quá hạn · 3</b>");
-    expect(msg).toContain("🟡 <b>Hôm nay · 1</b>");
+    expect(msg).toContain("🟡 <b>Hạn chót hôm nay · 1</b>");
 
     // Workflow: 0 overdue (hidden), 2 today
     expect(msg).toContain("⚙️ <b>Workflow</b>");
@@ -265,6 +265,52 @@ describe("Telegram Digest Formatter", () => {
     expect(msg).not.toContain("Quá hạn · 0");
     expect(msg).not.toContain("Hôm nay · 0");
     expect(msg).not.toContain("· 0");
+  });
+
+  it("renders Quá hạn, Hạn chót hôm nay, and Đang thực hiện for Wework", () => {
+    const overdueTask: ActionableTask = {
+      id: 1,
+      name: "Việc quá hạn A",
+      isOverdue: true,
+      isDueToday: false,
+      url: "https://wework.base.vn/tasks?task=1",
+    };
+    const dueTodayTask: ActionableTask = {
+      id: 2,
+      name: "Việc hạn chót hôm nay B",
+      isOverdue: false,
+      isDueToday: true,
+      url: "https://wework.base.vn/tasks?task=2",
+    };
+    const inProgressTask: ActionableTask = {
+      id: 3,
+      name: "Việc đang làm dở dang C",
+      isOverdue: false,
+      isDueToday: false,
+      isInProgress: true,
+      url: "https://wework.base.vn/tasks?task=3",
+    };
+
+    const digest = createBaseDigest({
+      status: "ready",
+      runDate: "2026-08-20",
+      wework: { status: "ok", items: [overdueTask, dueTodayTask, inProgressTask] },
+      workflow: { status: "ok", items: [] },
+      request: { status: "ok", items: [] },
+      counts: { wework: 3, workflow: 0, request: 0, total: 3 },
+    });
+
+    const chunks = formatTelegramDigest(digest);
+    expect(chunks.length).toBe(1);
+    const msg = chunks[0]!;
+
+    expect(msg).toContain("📋 <b>Wework</b>");
+    expect(msg).toContain("🔴 <b>Quá hạn · 1</b>");
+    expect(msg).toContain('1. Việc quá hạn A · <a href="https://wework.base.vn/tasks?task=1">Link</a>');
+    expect(msg).toContain("🟡 <b>Hạn chót hôm nay · 1</b>");
+    expect(msg).toContain('1. Việc hạn chót hôm nay B · <a href="https://wework.base.vn/tasks?task=2">Link</a>');
+    expect(msg).toContain("🔵 <b>Đang thực hiện · 1</b>");
+    expect(msg).toContain('1. Việc đang làm dở dang C · <a href="https://wework.base.vn/tasks?task=3">Link</a>');
   });
 
   it("distinguishes failed module from successful zero-state module in partial digest", () => {
@@ -415,7 +461,7 @@ describe("Telegram Digest Formatter", () => {
 
       // Wework item
       expect(msg).toContain("📋 <b>Wework</b>");
-      expect(msg).toContain("🟡 <b>Hôm nay · 1</b>");
+      expect(msg).toContain("🟡 <b>Hạn chót hôm nay · 1</b>");
       expect(msg).toContain("1. Hoàn thiện kế hoạch quý 3 · <a href=\"https://wework.base.vn/tasks?task=101\">Link</a>");
 
       // Zero-state for empty modules

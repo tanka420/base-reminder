@@ -297,6 +297,159 @@ describe("Wework Collector & Task Classification", () => {
     });
   });
 
+  describe("In-progress tasks & Start time classification", () => {
+    it("marks task starting today as isStartingToday=true, isInProgress=true, actionable=true even with future deadline", () => {
+      // 2026-08-20 in VN -> 1787187600
+      const todayUnix = 1787187600;
+      // Deadline next week: 2026-08-27 -> 1787849999
+      const futureDeadlineUnix = 1787849999;
+
+      const task: BaseWeworkTask = {
+        id: 501,
+        name: "Task starting today with future deadline",
+        status: "0",
+        review: "0",
+        start_time: todayUnix,
+        has_deadline: 1,
+        deadline: futureDeadlineUnix,
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+
+      expect(result.actionable).toBe(true);
+      expect(result.isStartingToday).toBe(true);
+      expect(result.isInProgress).toBe(true);
+      expect(result.isDueToday).toBe(false);
+      expect(result.isOverdue).toBe(false);
+    });
+
+    it("marks task past its start date as isInProgress=true, actionable=true even with future deadline", () => {
+      // Started 3 days ago: 2026-08-17 -> 1786928400
+      const pastStartUnix = 1786928400;
+      // Deadline next week: 2026-08-27 -> 1787849999
+      const futureDeadlineUnix = 1787849999;
+
+      const task: BaseWeworkTask = {
+        id: 502,
+        name: "Task started 3 days ago, in progress",
+        status: "0",
+        review: "0",
+        start_time: pastStartUnix,
+        has_deadline: 1,
+        deadline: futureDeadlineUnix,
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+
+      expect(result.actionable).toBe(true);
+      expect(result.isStartingToday).toBe(false);
+      expect(result.isInProgress).toBe(true);
+      expect(result.isDueToday).toBe(false);
+      expect(result.isOverdue).toBe(false);
+    });
+
+    it("marks task past start date with NO deadline as isInProgress=true, actionable=true", () => {
+      const pastStartUnix = 1786928400;
+
+      const task: BaseWeworkTask = {
+        id: 503,
+        name: "Task started in past without deadline",
+        status: "0",
+        review: "0",
+        stime: pastStartUnix,
+        has_deadline: 0,
+        deadline: 0,
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+
+      expect(result.actionable).toBe(true);
+      expect(result.isInProgress).toBe(true);
+      expect(result.isDueToday).toBe(false);
+      expect(result.isOverdue).toBe(false);
+    });
+
+    it("marks task with started=1 as isInProgress=true, actionable=true even without start_time", () => {
+      const task: BaseWeworkTask = {
+        id: 504,
+        name: "Task explicitly started by user",
+        status: "0",
+        review: "0",
+        started: 1,
+        deadline: 1787849999, // Future deadline
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+
+      expect(result.actionable).toBe(true);
+      expect(result.isInProgress).toBe(true);
+      expect(result.isDueToday).toBe(false);
+      expect(result.isOverdue).toBe(false);
+    });
+
+    it("marks task with progress logged (complete > 0%) as isInProgress=true, actionable=true", () => {
+      const task: BaseWeworkTask = {
+        id: 505,
+        name: "Task with 45% progress",
+        status: "0",
+        review: "0",
+        complete: "45.00",
+        deadline: 1787849999, // Future deadline
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+
+      expect(result.actionable).toBe(true);
+      expect(result.isInProgress).toBe(true);
+    });
+
+    it("excludes task with future start date (has not started yet)", () => {
+      // Starts tomorrow: 2026-08-21 -> 1787331599
+      const tomorrowStartUnix = 1787331599;
+
+      const task: BaseWeworkTask = {
+        id: 506,
+        name: "Task scheduled to start tomorrow",
+        status: "0",
+        review: "0",
+        start_time: tomorrowStartUnix,
+        started: 0,
+        deadline: 1787849999, // Future deadline
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+
+      expect(result.actionable).toBe(false);
+      expect(result.isInProgress).toBe(false);
+      expect(result.isStartingToday).toBe(false);
+    });
+
+    it("excludes unscheduled backlog task (no start_time, no deadline, not started)", () => {
+      const task: BaseWeworkTask = {
+        id: 507,
+        name: "Backlog task with no dates",
+        status: "0",
+        review: "0",
+        start_time: 0,
+        stime: 0,
+        deadline: 0,
+        started: 0,
+        complete: "0.00",
+        overdue: 0,
+      };
+
+      const result = classifyWeworkTask(task, TZ, mockNow);
+
+      expect(result.actionable).toBe(false);
+    });
+  });
+
   describe("Timezone day boundary edge cases", () => {
     it("handles midnight boundaries in Asia/Ho_Chi_Minh correctly", () => {
       // 2026-08-20 00:00:01 in VN -> 2026-08-19 17:00:01 UTC

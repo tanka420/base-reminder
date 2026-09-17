@@ -33,6 +33,13 @@ export interface BaseWeworkTask {
   deadline_has_time?: number;
   overdue?: number | string;
   project_id?: number;
+  start_time?: string | number;
+  stime?: string | number;
+  etime?: string | number;
+  started?: number | string;
+  complete?: string | number;
+  urgent?: string | number;
+  important?: string | number;
   [key: string]: unknown;
 }
 
