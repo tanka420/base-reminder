@@ -140,8 +140,21 @@ HEALTH_PORT=3000
 > [!IMPORTANT]
 > Keep `ENABLE_CRON_SCHEDULER=false` on initial startup until manual tests and onboarding pass.
 
-### Step 3: Build & Start Containers
+### Step 3: Start Containers
 
+You can either pull the pre-built image from GitHub Packages (GHCR) or build it locally.
+
+**Option A: Pull pre-built image (Recommended — fast, no compilation on server)**
+```bash
+# Pull the latest image published by GitHub Actions
+docker compose pull
+
+# Start database and application
+docker compose up -d
+```
+*(If deploying without source code, use `docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d`)*
+
+**Option B: Build from source locally on server**
 ```bash
 # Build production image
 docker compose build

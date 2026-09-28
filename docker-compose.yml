@@ -16,6 +16,7 @@
 
 services:
   app:
+    image: ghcr.io/tanka420/base-reminder:latest
     build:
       context: .
       dockerfile: Dockerfile

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+
+# Test and coverage
+coverage/
+
+# Logs
+logs/
+*.log
+
+# Environment files
+.env
+.env*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# Docker & local compose files
+docker-compose*.yml
+
+# Documentation & research
+docs/
+research/
+scratch/
+tmp/
+README.md
